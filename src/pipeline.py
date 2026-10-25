@@ -151,14 +151,15 @@ class PipelinePage:
                 value=self.mode,
                 on_change=self.change_mode
             )
-            
+
             self.form = ui.column().classes('w-full gap-4')
             self.render_form()
 
             with ui.row().classes('w-full gap-3 justify-end'):
-                ui.button('Load Parameters', icon='upload_file', on_click=self.load_dialog)
-                ui.button('Save Parameters', icon='download', on_click=self.save_dialog)
-                ui.button('Submit', icon='send', on_click=self.submit)
+                with ui.element('div'):
+                    self.submit_button = ui.button('Submit', icon='send', on_click=self.submit)
+                    self.submit_button.disable()
+                    self.submit_tooltip = ui.tooltip('Please upload sample sheet.').classes('text-sm')
 
     def init_values(self):
         self.values = {}
@@ -178,10 +179,18 @@ class PipelinePage:
 
         with self.form:
 
+            ui.button('Upload Fastq Files', icon='upload_file').disable()
+
             ui.button('Upload Sample Sheet', icon='upload_file', on_click=self.sample_sheet_dialog)
             if self.sample_sheet_name:  # show sample sheet name if uploaded
                 ui.label(self.sample_sheet_name).classes('text-sm text-slate-500')
+                self.submit_button.enable()
+                self.submit_tooltip.set_visibility(False)
             
+            with ui.row().classes('w-full gap-3 justify-start'):
+                ui.button('Load Parameters', icon='upload_file', on_click=self.load_dialog)
+                ui.button('Save Parameters', icon='download', on_click=self.save_dialog)
+
             for key, options in MODES[self.mode].items():  # follow items and data types in the presets
                 if isinstance(options, bool):
                     control = ui.checkbox(key).bind_value(self.values, key)  # use self.values to fill in
