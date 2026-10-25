@@ -49,7 +49,7 @@ def run_command(job_id: int, cmd: str):
         ''',
         {'status': 'running', 'job_id': job_id}
     )
-    
+
     ret = subprocess.run(cmd, shell=True, check=False)
 
     status = 'completed' if ret.returncode == 0 else 'failed'

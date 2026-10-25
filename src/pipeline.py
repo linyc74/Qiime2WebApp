@@ -3,7 +3,7 @@ import re
 from nicegui import ui
 from os.path import join
 from typing import Callable
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from .worker import Worker
 from .database import Database
 from .io import read_parameters, write_parameters
@@ -127,11 +127,12 @@ class PipelinePage:
         self.mode = 'illumina'
         self.values = {}  # ground truth values
         self.controls = {}  # UI controls
+        self.dashboard = None  # dashboard dialog table
         self.sample_sheet_name = ''
         self.sample_sheet_content = ''
         self.worker = Worker(user_id=self.user_id)
 
-        self.initialize_values()
+        self.init_values()
         
         ui.colors(primary='#12329A', secondary='#25636b')
 
@@ -159,7 +160,7 @@ class PipelinePage:
                 ui.button('Save Parameters', icon='download', on_click=self.save_dialog)
                 ui.button('Submit', icon='send', on_click=self.submit)
 
-    def initialize_values(self):
+    def init_values(self):
         self.values = {}
         for key, options in MODES[self.mode].items():
             if isinstance(options, list):
@@ -218,7 +219,7 @@ class PipelinePage:
             ui.upload(
                 label='Choose sample sheet',
                 auto_upload=True,
-                on_upload=upload,  # async function defined above
+                on_upload=upload,
                 max_file_size=10_000_000,
                 on_rejected=lambda: ui.notify('Choose a sample sheet smaller than 10 MB.', type='negative')
             ).classes('w-full')
@@ -262,7 +263,7 @@ class PipelinePage:
             ui.upload(
                 label='Choose parameter file',
                 auto_upload=True,
-                on_upload=load,  # async function defined above
+                on_upload=load,
                 max_file_size=1_000_000,
                 on_rejected=lambda: ui.notify('Choose a parameter file smaller than 1 MB.', type='negative')
             ).props(
@@ -295,19 +296,72 @@ class PipelinePage:
         with self.form.client, ui.dialog() as dialog, ui.card().classes('w-full max-w-3xl'):
             ui.label('Dashboard').classes('text-xl font-semibold')
 
-            ui.table(columns=[
+            self.dashboard = ui.table(columns=[
                 {'name': 'id',      'label': 'Job ID',       'field': 'id',      'align': 'left'},
+                {'name': 'output',  'label': 'Output',       'field': 'output',  'align': 'left'},
                 {'name': 'start',   'label': 'Start Time',   'field': 'start',   'align': 'left'},
                 {'name': 'elapsed', 'label': 'Elapsed Time', 'field': 'elapsed', 'align': 'left'},
+                {'name': 'status',  'label': 'Status',       'field': 'status',  'align': 'left'},
             ], rows=[], row_key='id', selection='multiple').classes('w-full')
 
             with ui.row().classes('w-full justify-end'):
-                ui.button('Update', icon='refresh').disable()
-                ui.button('Kill Jobs', icon='stop', color='negative').disable()
+                ui.button('Update', icon='refresh', on_click=self.update_jobs)
+                ui.button('Cancel Jobs', icon='stop', color='negative').disable()
                 ui.button('Download', icon='download').disable()
                 ui.button('Close', on_click=dialog.close).props('flat')
-
+        
+        self.update_jobs()
         dialog.open()
+    
+    def update_jobs(self):
+        db = Database()
+        ret = db.execute(
+            '''
+                SELECT timestamp, started_at, ended_at, status FROM jobs WHERE user_id = :user_id ORDER BY started_at
+            ''',
+            {'user_id': self.user_id}
+        )
+        jobs: list[tuple] = ret.fetchall()
+        rows: list[dict] = []
+        for job in jobs:
+            timestamp, started_at, ended_at, status = job
+
+            output = self.get_output_dirname(timestamp)
+
+            if status == 'waiting':
+                elapsed = None
+            elif status == 'running':
+                elapsed = datetime.now(timezone.utc) - started_at
+            elif status in ['completed', 'failed']:
+                elapsed = ended_at - started_at
+            else:
+                raise ValueError(f'Invalid status: {status}')
+            
+            if isinstance(started_at, datetime):
+                started_at = started_at.strftime('%Y-%m-%d %H:%M:%S')
+
+            if isinstance(elapsed, timedelta):
+                elapsed = format_timedelta(elapsed)
+            
+            rows.append({
+                'id': timestamp,
+                'output': output,
+                'start': started_at,
+                'elapsed': elapsed,
+                'status': status,
+            })
+
+        self.dashboard.update_rows(rows)
+
+    def get_output_dirname(self, timestamp: str) -> str:
+        dirs = get_dirs(
+            source=join(JOB_DIR, self.user_dirname, timestamp),
+            isfullpath=False)
+
+        if len(dirs) == 0:
+            return '(not found)'
+
+        return dirs[0]
 
     def submit(self):
         if self.sample_sheet_name == '':
@@ -368,3 +422,24 @@ def get_email(user_id: int) -> str:
 
 def to_valid_filename(s: str) -> str:
     return re.sub(r"[^A-Za-z0-9]", '_', s)
+
+
+def format_timedelta(delta_t: timedelta) -> str:
+    hours, remainder = divmod(int(delta_t.total_seconds()), 3600)
+    minutes, seconds = divmod(remainder, 60)
+    return f'{hours:02d}:{minutes:02d}:{seconds:02d}'
+
+
+def get_dirs(source: str, isfullpath: bool) -> list[str]:
+    ret = []
+    for path, dirs, files in os.walk(source):
+        if path == source:
+            ret = [d for d in dirs]
+
+    if isfullpath:
+        ret = [join(source, d) for d in ret]
+
+    if len(ret) > 0:
+        ret.sort()  # make the order consistent across OS platforms
+
+    return ret
