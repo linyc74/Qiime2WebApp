@@ -15,12 +15,12 @@ Two services must be running:
 
 From the project directory `Qiime2WebApp`, in two separate terminals, start the Redis Queue worker and the app:
 
-Terminal 1:
+Terminal 1, start a Redix Queue worker named `qiime2`:
 ```bash
 rq worker -w rq.worker.SpawnWorker qiime2
 ```
 
-Terminal 2:
+Terminal 2, start the app:
 ```bash
 python main.py
 ```

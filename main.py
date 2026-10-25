@@ -1,10 +1,6 @@
-from nicegui import ui
-from src.view import PipelinePage
+import uvicorn
+from src.app import app
 
 
-@ui.page('/')
-def root():
-    PipelinePage()
-
-
-ui.run(title='Qiime2 App')
+if __name__ == '__main__':
+    uvicorn.run(app, host='127.0.0.1', port=8080)

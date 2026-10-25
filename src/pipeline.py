@@ -1,10 +1,11 @@
 import os
-import csv
-import subprocess
+import re
 from nicegui import ui
 from os.path import join
+from typing import Callable
 from datetime import datetime
 from .worker import Worker
+from .database import Database
 from .io import read_parameters, write_parameters
 
 
@@ -110,8 +111,6 @@ MODES = {
     'illumina': ILLUMINA_KEY_TO_OPTIONS,
     'pacbio': PACBIO_KEY_TO_OPTIONS
 }
-USERNAME = 'username'
-USER_ID = 1
 QIIME2_PIPELINE = 'qiime2_pipeline-2.12.0'
 FASTQ_DIR = './data/fastq'
 RESOURCE_DIR = './data/resources'
@@ -120,24 +119,32 @@ JOB_DIR = './data/jobs'
 
 class PipelinePage:
 
-    def __init__(self):
+    def __init__(self, user_id: int, on_logout: Callable | None = None):
+        self.user_id = user_id
+        self.email = get_email(user_id)
+        self.user_dirname = f'{self.user_id}_{to_valid_filename(self.email)}'
+
         self.mode = 'illumina'
         self.values = {}  # ground truth values
         self.controls = {}  # UI controls
         self.sample_sheet_name = ''
         self.sample_sheet_content = ''
-        self.worker = Worker(user_id=USER_ID)
+        self.worker = Worker(user_id=self.user_id)
 
         self.initialize_values()
         
         ui.colors(primary='#12329A', secondary='#25636b')
-        
+
         with ui.column().classes('w-full max-w-4xl mx-auto p-4 sm:p-8 gap-6'):
 
             with ui.row().classes('w-full items-center justify-between'):
                 ui.label('Qiime2 App').classes('text-3xl font-semibold')
-                ui.button('Dashboard', icon='table_chart', on_click=self.show_dashboard).props('outline')
+                with ui.row().classes('gap-3'):
+                    ui.button('Dashboard', icon='table_chart', on_click=self.show_dashboard).props('outline')
+                    ui.button('Log out', icon='logout', on_click=on_logout).props('outline')
             
+            ui.label(self.email).classes('text-sm text-slate-500')
+
             ui.toggle(
                 {'illumina': 'Illumina Mode', 'pacbio': 'PacBio Mode'},
                 value=self.mode,
@@ -249,8 +256,8 @@ class PipelinePage:
                     dialog.close()
                     ui.notify('Parameters loaded.', type='positive')
                 
-                except (ValueError, UnicodeError, csv.Error) as error:
-                    ui.notify(str(error), type='negative')
+                except Exception as error:
+                    ui.notify(f'Error loading parameters: {error}', type='negative')
 
             ui.upload(
                 label='Choose parameter file',
@@ -309,7 +316,7 @@ class PipelinePage:
         
         job_timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S.%f')[:-3]  # down to milliseconds
 
-        outdir = join(JOB_DIR, USERNAME, job_timestamp, self.values['output'])
+        outdir = join(JOB_DIR, self.user_dirname, job_timestamp, self.values['output'])
         os.makedirs(outdir, exist_ok=True)
 
         with open(join(outdir, self.sample_sheet_name), 'w') as f:
@@ -324,7 +331,7 @@ class PipelinePage:
     def build_cmd(self, outdir: str) -> str:
         lines = [
             f'python {QIIME2_PIPELINE}',
-            f'--fq-dir="{join(FASTQ_DIR, USERNAME)}"',
+            f'--fq-dir="{join(FASTQ_DIR, self.user_dirname)}"',
             f'--sample-sheet="{join(outdir, self.sample_sheet_name)}"',
         ]
 
@@ -346,3 +353,18 @@ class PipelinePage:
 
         cmd = ' \\\n  '.join(lines)
         return cmd
+
+
+def get_email(user_id: int) -> str:
+    db = Database()
+    ret = db.execute(
+        '''
+            SELECT email FROM users WHERE id = :user_id
+        ''',
+        {'user_id': user_id}
+    )
+    return ret.scalar_one()
+
+
+def to_valid_filename(s: str) -> str:
+    return re.sub(r"[^A-Za-z0-9]", '_', s)
