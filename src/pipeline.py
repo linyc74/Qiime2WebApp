@@ -7,8 +7,8 @@ from os.path import join
 from typing import Callable
 from datetime import datetime, timezone, timedelta
 from .database import Database
-from .worker import Worker, JobInput, JOB_DIR
-from .io import read_parameters, write_parameters
+from .io import compute_file_md5, parse_md5, read_parameters, write_parameters
+from .worker import Worker, JobInput, JOB_DIR, FASTQ_DIR
 
 
 ILLUMINA_KEY_TO_OPTIONS = {
@@ -161,7 +161,7 @@ class PipelinePage:
 
         with self.form:
 
-            ui.button('Upload Fastq Files', icon='upload_file').disable()
+            ui.button('Upload Fastq Files', icon='upload_file', on_click=self.upload_fastq_dialog)
 
             ui.button('Upload Sample Sheet', icon='upload_file', on_click=self.sample_sheet_dialog)
             if self.input.sample_sheet_name:  # show sample sheet name if uploaded
@@ -184,6 +184,91 @@ class PipelinePage:
                     control.bind_value(self.input.values, key).props('outlined').classes('w-full')
                 
                 self.controls[key] = control
+
+    def upload_fastq_dialog(self):
+        with self.form.client, ui.dialog() as dialog, ui.card().classes('w-full max-w-2xl'):
+            ui.label('Upload FASTQ Files').classes('text-xl font-semibold')
+            ui.label(
+                'Upload FASTQ files (.fastq, .fq, .fastq.gz, .fq.gz) and optional .md5 checksum files to verify integrity.'
+            ).classes('text-sm text-slate-500')
+
+            table = ui.table(
+                columns=[
+                    {'name': 'name',   'label': 'File',      'field': 'name',   'align': 'left'},
+                    {'name': 'md5',    'label': 'MD5',       'field': 'md5',    'align': 'left'},
+                    {'name': 'status', 'label': 'Integrity', 'field': 'status', 'align': 'left'},
+                ],
+                rows=[],
+                row_key='name',
+            ).classes('w-full')
+
+            uploaded_md5: dict[str, str] = {}
+            expected_md5: dict[str, str] = {}
+
+            def refresh_table() -> None:
+                all_files = sorted(set(uploaded_md5.keys()) | set(expected_md5.keys()))
+                rows: list[dict[str, str]] = []
+                for filename in all_files:
+                    actual = uploaded_md5.get(filename, '')
+                    expected = expected_md5.get(filename, '')
+                    if actual and expected:
+                        status = 'Verified (MD5 match)' if actual == expected else f'Mismatch (expected {expected})'
+                    elif actual:
+                        status = 'Uploaded (no .md5 reference)'
+                    else:
+                        status = 'Waiting for FASTQ file'
+                    rows.append({'name': filename, 'md5': actual or '-', 'status': status})
+                table.update_rows(rows)
+
+            async def upload(event):
+                filename = os.path.basename(event.file.name)
+                user_fastq_dir = join(FASTQ_DIR, self.input.user_dirname)
+                os.makedirs(user_fastq_dir, exist_ok=True)
+
+                if filename.lower().endswith('.md5') or filename.lower().endswith('.txt'):
+                    text = await event.file.text()
+                    parsed = parse_md5(filename, text)
+                    if not parsed:
+                        ui.notify(f'Could not parse MD5 entries from {filename}.', type='negative')
+                        return
+                    expected_md5.update(parsed)
+                    refresh_table()
+                    for target, exp_hash in parsed.items():
+                        act_hash = uploaded_md5.get(target)
+                        if act_hash is not None:
+                            if act_hash == exp_hash:
+                                ui.notify(f'{target}: MD5 verified.', type='positive')
+                            else:
+                                ui.notify(f'{target}: MD5 mismatch!', type='negative')
+                    return
+
+                filepath = join(user_fastq_dir, filename)
+                await event.file.save(filepath)
+                actual_hash = compute_file_md5(filepath)
+                uploaded_md5[filename] = actual_hash
+                refresh_table()
+
+                exp_hash = expected_md5.get(filename)
+                if exp_hash is not None:
+                    if actual_hash == exp_hash:
+                        ui.notify(f'{filename} uploaded and MD5 verified.', type='positive')
+                    else:
+                        ui.notify(f'{filename}: MD5 mismatch!', type='negative')
+                else:
+                    ui.notify(f'{filename} uploaded (MD5: {actual_hash}).', type='positive')
+
+            ui.upload(
+                label='Choose fastq or .md5 files',
+                multiple=True,
+                auto_upload=True,
+                on_upload=upload,
+            ).props(
+                'accept=".fastq,.fq,.gz,.md5,.txt"'
+            ).classes('w-full')
+
+            ui.button('Close', on_click=dialog.close).props('flat')
+
+        dialog.open()
 
     def sample_sheet_dialog(self):
         with self.form.client, ui.dialog() as dialog, ui.card().classes('w-full max-w-lg'):
