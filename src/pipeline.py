@@ -4,8 +4,8 @@ from nicegui import ui
 from os.path import join
 from typing import Callable
 from datetime import datetime, timezone, timedelta
-from .worker import Worker
 from .database import Database
+from .worker import Worker, JobInput, JOB_DIR
 from .io import read_parameters, write_parameters
 
 
@@ -111,29 +111,17 @@ MODES = {
     'illumina': ILLUMINA_KEY_TO_OPTIONS,
     'pacbio': PACBIO_KEY_TO_OPTIONS
 }
-QIIME2_PIPELINE = 'qiime2_pipeline-2.12.0'
-FASTQ_DIR = './data/fastq'
-RESOURCE_DIR = './data/resources'
-JOB_DIR = './data/jobs'
 
 
 class PipelinePage:
 
     def __init__(self, user_id: int, on_logout: Callable | None = None):
-        self.user_id = user_id
-        self.email = get_email(user_id)
-        self.user_dirname = f'{self.user_id}_{to_valid_filename(self.email)}'
+        self.input = UserInput(user_id=user_id)
+        self.worker = Worker()
 
-        self.mode = 'illumina'
-        self.values = {}  # ground truth values
-        self.controls = {}  # UI controls
-        self.dashboard = None  # dashboard dialog table
-        self.sample_sheet_name = ''
-        self.sample_sheet_content = ''
-        self.worker = Worker(user_id=self.user_id)
+        self.controls = {}
+        self.dashboard = Dashboard(user_input=self.input)
 
-        self.init_values()
-        
         ui.colors(primary='#12329A', secondary='#25636b')
 
         with ui.column().classes('w-full max-w-4xl mx-auto p-4 sm:p-8 gap-6'):
@@ -141,14 +129,14 @@ class PipelinePage:
             with ui.row().classes('w-full items-center justify-between'):
                 ui.label('Qiime2 App').classes('text-3xl font-semibold')
                 with ui.row().classes('gap-3'):
-                    ui.button('Dashboard', icon='table_chart', on_click=self.show_dashboard).props('outline')
+                    ui.button('Dashboard', icon='table_chart', on_click=self.dashboard.show).props('outline')
                     ui.button('Log out', icon='logout', on_click=on_logout).props('outline')
             
-            ui.label(self.email).classes('text-sm text-slate-500')
+            ui.label(self.input.email).classes('text-sm text-slate-500')
 
             ui.toggle(
                 {'illumina': 'Illumina Mode', 'pacbio': 'PacBio Mode'},
-                value=self.mode,
+                value=self.input.mode,
                 on_change=self.change_mode
             )
 
@@ -161,16 +149,8 @@ class PipelinePage:
                     self.submit_button.disable()
                     self.submit_tooltip = ui.tooltip('Please upload sample sheet.').classes('text-sm')
 
-    def init_values(self):
-        self.values = {}
-        for key, options in MODES[self.mode].items():
-            if isinstance(options, list):
-                self.values[key] = options[0]
-            else:
-                self.values[key] = options
-
     def change_mode(self, event):
-        self.mode = event.value
+        self.input.mode = event.value
         self.render_form()
 
     def render_form(self):
@@ -182,24 +162,24 @@ class PipelinePage:
             ui.button('Upload Fastq Files', icon='upload_file').disable()
 
             ui.button('Upload Sample Sheet', icon='upload_file', on_click=self.sample_sheet_dialog)
-            if self.sample_sheet_name:  # show sample sheet name if uploaded
-                ui.label(self.sample_sheet_name).classes('text-sm text-slate-500')
+            if self.input.sample_sheet_name:  # show sample sheet name if uploaded
+                ui.label(self.input.sample_sheet_name).classes('text-sm text-slate-500')
                 self.submit_button.enable()
                 self.submit_tooltip.set_visibility(False)
             
             with ui.row().classes('w-full gap-3 justify-start'):
-                ui.button('Load Parameters', icon='upload_file', on_click=self.load_dialog)
-                ui.button('Save Parameters', icon='download', on_click=self.save_dialog)
+                ui.button('Load Parameters', icon='upload_file', on_click=self.load_parameter_dialog)
+                ui.button('Save Parameters', icon='download', on_click=self.save_parameter_dialog)
 
-            for key, options in MODES[self.mode].items():  # follow items and data types in the presets
+            for key, options in MODES[self.input.mode].items():  # follow items and data types in the presets
                 if isinstance(options, bool):
-                    control = ui.checkbox(key).bind_value(self.values, key)  # use self.values to fill in
+                    control = ui.checkbox(key).bind_value(self.input.values, key)  # use self.values to fill in
                 else:
                     choices = list(options)  # create a new list
-                    if self.values[key] not in choices:
-                        choices.append(self.values[key])  # append to the new list if not present
+                    if self.input.values[key] not in choices:
+                        choices.append(self.input.values[key])  # append to the new list if not present
                     control = ui.select(choices, label=key, new_value_mode='add-unique')
-                    control.bind_value(self.values, key).props('outlined').classes('w-full')
+                    control.bind_value(self.input.values, key).props('outlined').classes('w-full')
                 
                 self.controls[key] = control
 
@@ -213,12 +193,9 @@ class PipelinePage:
                     return
 
                 content = await event.file.text()
-                if not content:
-                    ui.notify('Choose a non-empty sample sheet.', type='negative')
-                    return
 
-                self.sample_sheet_name = event.file.name
-                self.sample_sheet_content = content
+                self.input.sample_sheet_name = event.file.name
+                self.input.sample_sheet_content = content
 
                 self.render_form()  # refresh UI controls
 
@@ -237,7 +214,7 @@ class PipelinePage:
         
         dialog.open()
 
-    def load_dialog(self):
+    def load_parameter_dialog(self):
         with self.form.client, ui.dialog() as dialog, ui.card().classes('w-full max-w-lg'):
             ui.label('Load Parameters').classes('text-xl font-semibold')
 
@@ -245,27 +222,10 @@ class PipelinePage:
                 try:
                     if event.file.size() > 1_000_000:
                         raise ValueError('Choose a parameter file smaller than 1 MB.')
-                    parameters = read_parameters(event.file.name, await event.file.text())
-                    updates = {}
-                    for key, default in MODES[self.mode].items():
-                        if isinstance(default, bool):
-                            value = parameters.get(key, False)
-                            if isinstance(value, str):
-                                if value.lower() not in ('true', 'false'):
-                                    raise ValueError(f'{key} must be a flag, true, or false.')
-                                value = value.lower() == 'true'
-                            updates[key] = value
-                        elif key in parameters:
-                            if not isinstance(parameters[key], str):
-                                raise ValueError(f'{key} requires a value.')
-                            updates[key] = parameters[key]
-                    self.values.update(updates)
-
-                    self.render_form()  # refresh UI controls
-                    
+                    self.input.load_parameters(name=event.file.name, text=await event.file.text())
+                    self.render_form()
                     dialog.close()
                     ui.notify('Parameters loaded.', type='positive')
-                
                 except Exception as error:
                     ui.notify(f'Error loading parameters: {error}', type='negative')
 
@@ -285,14 +245,14 @@ class PipelinePage:
         
         dialog.open()
 
-    def save_dialog(self):
+    def save_parameter_dialog(self):
         with self.form.client, ui.dialog() as dialog, ui.card().classes('w-full max-w-lg'):
             ui.label('Save Parameters').classes('text-xl font-semibold')
             file_format = ui.select(['.csv', '.tsv', '.tab', '.txt'], value='.csv', label='Format')
 
             def download():
                 suffix = file_format.value
-                ui.download(write_parameters(self.values, suffix), f'{self.mode}-parameters{suffix}')
+                ui.download(write_parameters(self.input.values, suffix), f'{self.input.mode}-parameters{suffix}')
                 dialog.close()
 
             with ui.row():
@@ -301,11 +261,94 @@ class PipelinePage:
 
         dialog.open()
 
-    def show_dashboard(self):
-        with self.form.client, ui.dialog() as dialog, ui.card().classes('w-full max-w-3xl'):
+    def submit(self):
+        if self.input.sample_sheet_name == '':
+            ui.notify('Please upload a sample sheet.', type='negative')
+            return
+        
+        job_input = self.input.create_job()
+        self.worker.submit_job(job_input=job_input)
+
+        ui.notify(f'Submitted job [{job_input.timestamp}].', type='positive')
+
+
+class UserInput:
+    """
+    Current state (data model) for the user input, dynamically updated by the UI.
+    """
+
+    def __init__(self, user_id: int):
+        self.user_id = user_id
+        self.mode = 'illumina'
+        self.db = Database()
+        self.set_email()
+        self.user_dirname = f'{self.user_id}_{to_valid_filename(self.email)}'
+        self.sample_sheet_name = ''
+        self.sample_sheet_content = ''
+
+        self.values = {}
+        for key, options in MODES[self.mode].items():
+            if isinstance(options, list):
+                self.values[key] = options[0]
+            else:
+                self.values[key] = options
+
+    def set_email(self):
+        ret = self.db.execute(
+            '''
+                SELECT email FROM users WHERE id = :user_id
+            ''',
+            {'user_id': self.user_id}
+        )
+        self.email = ret.scalar_one()
+
+    def get_output_dirname(self, job_timestamp: str) -> str:
+        dirs = get_dirs(
+            source=join(JOB_DIR, self.user_dirname, job_timestamp),
+            isfullpath=False)
+
+        if len(dirs) == 0:
+            return '(not found)'
+
+        return dirs[0]
+
+    def load_parameters(self, name: str, text: str):
+        parameters = read_parameters(name, text)
+        updates = {}
+        for key, default in MODES[self.mode].items():
+            if isinstance(default, bool):
+                value = parameters.get(key, False)
+                if isinstance(value, str):
+                    if value.lower() not in ('true', 'false'):
+                        raise ValueError(f'{key} must be a flag, true, or false.')
+                    value = value.lower() == 'true'
+                updates[key] = value
+            elif key in parameters:
+                if not isinstance(parameters[key], str):
+                    raise ValueError(f'{key} requires a value.')
+                updates[key] = parameters[key]
+        self.values.update(updates)
+
+    def create_job(self) -> JobInput:
+        return JobInput(
+            user_id=self.user_id,
+            user_dirname=self.user_dirname,
+            sample_sheet_name=self.sample_sheet_name,
+            sample_sheet_content=self.sample_sheet_content,
+            parameters=self.values)
+
+
+class Dashboard:
+
+    def __init__(self, user_input: UserInput):
+        self.user_input = user_input
+        self.table: ui.table | None = None
+
+    def show(self):
+        with ui.dialog() as dialog, ui.card().classes('w-full max-w-3xl'):
             ui.label('Dashboard').classes('text-xl font-semibold')
 
-            self.dashboard = ui.table(columns=[
+            self.table = ui.table(columns=[
                 {'name': 'id',      'label': 'Job ID',       'field': 'id',      'align': 'left'},
                 {'name': 'output',  'label': 'Output',       'field': 'output',  'align': 'left'},
                 {'name': 'start',   'label': 'Start Time',   'field': 'start',   'align': 'left'},
@@ -314,28 +357,27 @@ class PipelinePage:
             ], rows=[], row_key='id', selection='multiple').classes('w-full')
 
             with ui.row().classes('w-full justify-end'):
-                ui.button('Update', icon='refresh', on_click=self.update_jobs)
+                ui.button('Update', icon='refresh', on_click=self.update)
                 ui.button('Cancel Jobs', icon='stop', color='negative').disable()
                 ui.button('Download', icon='download').disable()
                 ui.button('Close', on_click=dialog.close).props('flat')
-        
-        self.update_jobs()
+
+        self.update()
         dialog.open()
-    
-    def update_jobs(self):
-        db = Database()
-        ret = db.execute(
+
+    def update(self):
+        ret = self.user_input.db.execute(
             '''
                 SELECT timestamp, started_at, ended_at, status FROM jobs WHERE user_id = :user_id ORDER BY started_at
             ''',
-            {'user_id': self.user_id}
+            {'user_id': self.user_input.user_id}
         )
         jobs: list[tuple] = ret.fetchall()
         rows: list[dict] = []
         for job in jobs:
             timestamp, started_at, ended_at, status = job
 
-            output = self.get_output_dirname(timestamp)
+            output = self.user_input.get_output_dirname(timestamp)
 
             if status == 'waiting':
                 elapsed = None
@@ -345,13 +387,13 @@ class PipelinePage:
                 elapsed = ended_at - started_at
             else:
                 raise ValueError(f'Invalid status: {status}')
-            
+
             if isinstance(started_at, datetime):
                 started_at = started_at.strftime('%Y-%m-%d %H:%M:%S')
 
             if isinstance(elapsed, timedelta):
                 elapsed = format_timedelta(elapsed)
-            
+
             rows.append({
                 'id': timestamp,
                 'output': output,
@@ -360,73 +402,8 @@ class PipelinePage:
                 'status': status,
             })
 
-        self.dashboard.update_rows(rows)
-
-    def get_output_dirname(self, timestamp: str) -> str:
-        dirs = get_dirs(
-            source=join(JOB_DIR, self.user_dirname, timestamp),
-            isfullpath=False)
-
-        if len(dirs) == 0:
-            return '(not found)'
-
-        return dirs[0]
-
-    def submit(self):
-        if self.sample_sheet_name == '':
-            ui.notify('Please upload a sample sheet.', type='negative')
-            return
-        
-        job_timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S.%f')[:-3]  # down to milliseconds
-
-        outdir = join(JOB_DIR, self.user_dirname, job_timestamp, self.values['output'])
-        os.makedirs(outdir, exist_ok=True)
-
-        with open(join(outdir, self.sample_sheet_name), 'w') as f:
-            f.write(self.sample_sheet_content)
-
-        cmd = self.build_cmd(outdir=outdir)
-
-        self.worker.submit_job(job_timestamp=job_timestamp, cmd=cmd)
-
-        ui.notify(f'Submitted job [{job_timestamp}].', type='positive')
-
-    def build_cmd(self, outdir: str) -> str:
-        lines = [
-            f'python {QIIME2_PIPELINE}',
-            f'--fq-dir="{join(FASTQ_DIR, self.user_dirname)}"',
-            f'--sample-sheet="{join(outdir, self.sample_sheet_name)}"',
-        ]
-
-        for key, value in self.values.items():
-
-            if isinstance(value, bool):
-                lines.append(f'--{key}')
-
-            elif key in ['output']:
-                lines.append(f'--{key}="{outdir}"')                
-            
-            elif key in ['nb-classifier-qza', 'reference-sequence-qza', 'reference-taxonomy-qza']:
-                lines.append(f'--{key}="{join(RESOURCE_DIR, value)}"')
-
-            else:
-                lines.append(f'--{key}="{value}"')
-                
-        lines.append(f'> "{join(outdir, "progress.txt")}" 2>&1')
-
-        cmd = ' \\\n  '.join(lines)
-        return cmd
-
-
-def get_email(user_id: int) -> str:
-    db = Database()
-    ret = db.execute(
-        '''
-            SELECT email FROM users WHERE id = :user_id
-        ''',
-        {'user_id': user_id}
-    )
-    return ret.scalar_one()
+        if self.table is not None:
+            self.table.update_rows(rows)
 
 
 def to_valid_filename(s: str) -> str:
@@ -452,3 +429,4 @@ def get_dirs(source: str, isfullpath: bool) -> list[str]:
         ret.sort()  # make the order consistent across OS platforms
 
     return ret
+

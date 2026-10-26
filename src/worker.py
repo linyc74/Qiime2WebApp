@@ -1,6 +1,9 @@
+import os
 import subprocess
 from rq import Queue
 from redis import Redis
+from os.path import join
+from datetime import datetime
 from .database import Database
 
 
@@ -8,26 +11,87 @@ REDIS_HOST = 'localhost'
 REDIS_PORT = 6379
 REDIS_QUEUE = 'qiime2'  # start the redis queue worker in another terminal: `rq worker -w rq.worker.SpawnWorker qiime2`
 
+QIIME2_PIPELINE = 'qiime2_pipeline-2.12.0'
+FASTQ_DIR = './data/fastq'
+RESOURCE_DIR = './data/resources'
+JOB_DIR = './data/jobs'
+
+
+class JobInput:
+
+    def __init__(
+            self,
+            user_id: int,
+            user_dirname: str,
+            sample_sheet_name: str,
+            sample_sheet_content: str,
+            parameters: dict):
+        """
+        Construct everything needed to submit a job.
+        """
+
+        self.user_id = user_id
+        self.user_dirname = user_dirname
+        self.sample_sheet_name = sample_sheet_name
+        self.sample_sheet_content = sample_sheet_content
+        self.parameters = parameters
+
+        self.timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S.%f')[:-3]  # down to milliseconds
+        self.outdir = join(JOB_DIR, self.user_dirname, self.timestamp, self.parameters['output'])
+
+        self.build_cmd()
+
+    def build_cmd(self):
+        lines = [
+            f'python {QIIME2_PIPELINE}',
+            f'--fq-dir="{join(FASTQ_DIR, self.user_dirname)}"',
+            f'--sample-sheet="{join(self.outdir, self.sample_sheet_name)}"',
+        ]
+
+        for key, value in self.parameters.items():
+
+            if isinstance(value, bool):
+                lines.append(f'--{key}')
+
+            elif key in ['output']:
+                lines.append(f'--{key}="{self.outdir}"')                
+            
+            elif key in ['nb-classifier-qza', 'reference-sequence-qza', 'reference-taxonomy-qza']:
+                lines.append(f'--{key}="{join(RESOURCE_DIR, value)}"')
+
+            else:
+                lines.append(f'--{key}="{value}"')
+                
+        lines.append(f'> "{join(self.outdir, "progress.txt")}" 2>&1')
+
+        self.cmd = ' \\\n  '.join(lines)
+
 
 class Worker:
 
-    user_id: int
+    def __init__(self):
+        self.db = Database()
 
-    def __init__(self, user_id: int):
-        self.user_id = user_id
+    def submit_job(self, job_input: JobInput):
+        j = job_input
 
-    def submit_job(self, job_timestamp: str, cmd: str):
-        db = Database()
-        ret = db.execute(
+        # create job record in database
+        ret = self.db.execute(
             '''
                 INSERT INTO jobs (user_id, timestamp, status)
                 VALUES (:user_id, :timestamp, :status)
                 RETURNING id
             ''',
-            {'user_id': self.user_id, 'timestamp': job_timestamp, 'status': 'waiting'}
+            {'user_id': j.user_id, 'timestamp': j.timestamp, 'status': 'waiting'}
         )
         job_id = ret.scalar_one()
 
+        # create output directory and write sample sheet
+        os.makedirs(j.outdir, exist_ok=True)
+        with open(join(j.outdir, j.sample_sheet_name), 'w') as f:
+            f.write(j.sample_sheet_content)
+
+        # enqueue job
         q = Queue(
             name=REDIS_QUEUE,
             connection=Redis(host=REDIS_HOST, port=REDIS_PORT)
@@ -35,7 +99,7 @@ class Worker:
         job = q.enqueue(
             run_command,
             job_id,
-            cmd,
+            j.cmd,
             job_timeout='24h',
         )
 
