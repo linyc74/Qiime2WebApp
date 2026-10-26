@@ -71,6 +71,10 @@ class Worker:
 
     def __init__(self):
         self.db = Database()
+        self.queue = Queue(
+            name=REDIS_QUEUE,
+            connection=Redis(host=REDIS_HOST, port=REDIS_PORT)
+        )
 
     def submit_job(self, job_input: JobInput):
         j = job_input
@@ -92,15 +96,19 @@ class Worker:
             f.write(j.sample_sheet_content)
 
         # enqueue job
-        q = Queue(
-            name=REDIS_QUEUE,
-            connection=Redis(host=REDIS_HOST, port=REDIS_PORT)
-        )
-        job = q.enqueue(
+        rq_job = self.queue.enqueue(
             run_command,
             job_id,
             j.cmd,
             job_timeout='24h',
+        )
+
+        # update database with Redis job ID
+        self.db.execute(
+            '''
+                UPDATE jobs SET rq_job_id = :rq_job_id WHERE id = :job_id
+            ''',
+            {'rq_job_id': rq_job.id, 'job_id': job_id}
         )
 
 

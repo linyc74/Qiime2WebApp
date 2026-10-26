@@ -7,7 +7,8 @@ from pathlib import Path
 
 
 def parse_md5(name: str, text: str) -> dict[str, str]:
-    """Parse MD5 checksum file content into a filename-to-hash mapping.
+    """
+    Parse MD5 checksum file content into a filename-to-hash dictionary.
 
     Supports both standard ``<md5>  <filename>`` (or ``MD5 (file) = <hash>``)
     and single-hash ``<md5>`` sidecar files (e.g. ``sample.fastq.gz.md5``).
@@ -33,7 +34,6 @@ def parse_md5(name: str, text: str) -> dict[str, str]:
 
 
 def compute_file_md5(filepath: str, chunk_size: int = 1024 * 1024) -> str:
-    """Compute the MD5 hex digest of a file on disk."""
     md5 = hashlib.md5()
     with open(filepath, 'rb') as f:
         while chunk := f.read(chunk_size):

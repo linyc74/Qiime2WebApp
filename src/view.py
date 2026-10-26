@@ -7,8 +7,8 @@ from os.path import join
 from typing import Callable
 from datetime import datetime, timezone, timedelta
 from .database import Database
-from .io import compute_file_md5, parse_md5, read_parameters, write_parameters
 from .worker import Worker, JobInput, JOB_DIR, FASTQ_DIR
+from .io import compute_file_md5, parse_md5, read_parameters, write_parameters
 
 
 ILLUMINA_KEY_TO_OPTIONS = {

@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse
 from starlette.middleware.sessions import SessionMiddleware
 from .database import Database
-from .pipeline import PipelinePage
+from .view import PipelinePage
 from .auth import BASE_URL, SESSION_TTL, SESSION_COOKIE, oauth, get_user, create_session, delete_session
 
 
