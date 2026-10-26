@@ -1,5 +1,7 @@
 import os
 import re
+import zipfile
+from io import BytesIO
 from nicegui import ui
 from os.path import join
 from typing import Callable
@@ -342,6 +344,7 @@ class Dashboard:
 
     def __init__(self, user_input: UserInput):
         self.user_input = user_input
+        self.db = Database()
         self.table: ui.table | None = None
 
     def show(self):
@@ -358,15 +361,15 @@ class Dashboard:
 
             with ui.row().classes('w-full justify-end'):
                 ui.button('Update', icon='refresh', on_click=self.update)
-                ui.button('Cancel Jobs', icon='stop', color='negative').disable()
-                ui.button('Download', icon='download').disable()
+                ui.button('Cancel Jobs', icon='stop', color='negative', on_click=self.cancel_jobs)
+                ui.button('Download', icon='download', on_click=self.download)
                 ui.button('Close', on_click=dialog.close).props('flat')
 
         self.update()
         dialog.open()
 
     def update(self):
-        ret = self.user_input.db.execute(
+        ret = self.db.execute(
             '''
                 SELECT timestamp, started_at, ended_at, status FROM jobs WHERE user_id = :user_id ORDER BY started_at
             ''',
@@ -404,6 +407,30 @@ class Dashboard:
 
         if self.table is not None:
             self.table.update_rows(rows)
+
+    def download(self):
+        if self.table is None or len(self.table.selected) == 0:
+            ui.notify('Please select at least one job.', type='negative')
+            return
+
+        user_job_dir = join(JOB_DIR, self.user_input.user_dirname)
+        buffer = BytesIO()
+        with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for row in self.table.selected:
+                job_dir = join(user_job_dir, row['id'])
+                for root, _, files in os.walk(job_dir):
+                    for file in files:
+                        filepath = join(root, file)
+                        arcname = os.path.relpath(filepath, user_job_dir)
+                        zf.write(filepath, arcname)
+
+        ui.download(buffer.getvalue(), 'jobs.zip')
+    
+    def cancel_jobs(self):
+        """
+        Need to fetch redis job ids from the database and kill them.
+        """
+        pass
 
 
 def to_valid_filename(s: str) -> str:
