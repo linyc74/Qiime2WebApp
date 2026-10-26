@@ -123,7 +123,7 @@ class PipelinePage:
         self.worker = Worker()
 
         self.controls = {}
-        self.dashboard = Dashboard(user_input=self.input)
+        self.dashboard = Dashboard(user_input=self.input, worker=self.worker)
         self.fastq_dialog = FastqDialog(user_input=self.input)
 
         ui.colors(primary='#12329A', secondary='#25636b')
@@ -348,8 +348,9 @@ class UserInput:
 
 class Dashboard:
 
-    def __init__(self, user_input: UserInput):
+    def __init__(self, user_input: UserInput, worker: Worker):
         self.user_input = user_input
+        self.worker = worker
         self.db = Database()
         self.table: ui.table | None = None
 
@@ -377,7 +378,7 @@ class Dashboard:
     def update(self):
         ret = self.db.execute(
             '''
-                SELECT timestamp, started_at, ended_at, status FROM jobs WHERE user_id = :user_id ORDER BY started_at
+                SELECT timestamp, started_at, ended_at, status FROM jobs WHERE user_id = :user_id ORDER BY timestamp
             ''',
             {'user_id': self.user_input.user_id}
         )
@@ -392,8 +393,11 @@ class Dashboard:
                 elapsed = None
             elif status == 'running':
                 elapsed = datetime.now(timezone.utc) - started_at
-            elif status in ['completed', 'failed']:
-                elapsed = ended_at - started_at
+            elif status in ['completed', 'failed', 'cancelled']:
+                if started_at is None or ended_at is None:
+                    elapsed = None
+                else:
+                    elapsed = ended_at - started_at
             else:
                 raise ValueError(f'Invalid status: {status}')
 
@@ -433,10 +437,28 @@ class Dashboard:
         ui.download(buffer.getvalue(), 'jobs.zip')
     
     def cancel_jobs(self):
-        """
-        Need to fetch redis job ids from the database and kill them.
-        """
-        pass
+        if self.table is None or len(self.table.selected) == 0:
+            ui.notify('Please select jobs to cancel.', type='negative')
+            return
+
+        for row in self.table.selected:
+            timestamp = row['id']
+
+            ret = self.db.execute(
+                '''
+                    SELECT id FROM jobs WHERE timestamp = :timestamp
+                ''',
+                {'timestamp': timestamp}
+            )
+            job_id = ret.scalar_one()
+
+            try:
+                self.worker.cancel_job(job_id)
+            except Exception as error:
+                ui.notify(f'Error canceling job: {error}', type='negative')
+                continue
+            
+        self.update()
 
 
 class FastqDialog:

@@ -1,6 +1,7 @@
 import os
+import rq
+import time
 import subprocess
-from rq import Queue
 from redis import Redis
 from os.path import join
 from datetime import datetime
@@ -71,10 +72,8 @@ class Worker:
 
     def __init__(self):
         self.db = Database()
-        self.queue = Queue(
-            name=REDIS_QUEUE,
-            connection=Redis(host=REDIS_HOST, port=REDIS_PORT)
-        )
+        self.redis = Redis(host=REDIS_HOST, port=REDIS_PORT)
+        self.queue = rq.Queue(name=REDIS_QUEUE, connection=self.redis)
 
     def submit_job(self, job_input: JobInput):
         j = job_input
@@ -110,6 +109,38 @@ class Worker:
             ''',
             {'rq_job_id': rq_job.id, 'job_id': job_id}
         )
+    
+    def cancel_job(self, job_id: int):
+        # get rq_job_id, status from database
+        ret = self.db.execute(
+            '''
+                SELECT rq_job_id, status FROM jobs WHERE id = :job_id
+            ''',
+            {'job_id': job_id}
+        )
+        rq_job_id, status = ret.fetchone()
+
+        if status in['completed', 'failed', 'cancelled']:
+            print(f'Job {job_id} ({rq_job_id}) is already {status}.')
+
+        elif status == 'waiting':  # cancel job if it was waiting, i.e. no started_at yet
+            rq_job = rq.job.Job.fetch(id=rq_job_id, connection=self.redis)
+            rq_job.cancel()
+            self.db.execute(
+                '''
+                    UPDATE jobs SET status = 'cancelled' WHERE id = :job_id
+                ''',
+                {'job_id': job_id}
+            )
+
+        else:  # job was running, i.e. that has started_at but no ended_at, add ended_at
+            rq.command.send_stop_job_command(job_id=rq_job_id, connection=self.redis)
+            self.db.execute(
+                '''
+                    UPDATE jobs SET status = 'cancelled', ended_at = NOW() WHERE id = :job_id
+                ''',
+                {'job_id': job_id}
+            )
 
 
 def run_command(job_id: int, cmd: str):
