@@ -6,6 +6,7 @@ from nicegui import ui
 from os.path import join
 from typing import Callable
 from datetime import datetime, timezone, timedelta
+from . import VERSION
 from .database import Database
 from .worker import Worker, JobInput, JOB_DIR, FASTQ_DIR
 from .io import compute_file_md5, parse_md5, read_parameters, write_parameters
@@ -130,7 +131,9 @@ class PipelinePage:
         with ui.column().classes('w-full max-w-4xl mx-auto p-4 sm:p-8 gap-6'):
 
             with ui.row().classes('w-full items-center justify-between'):
-                ui.label('Qiime2 App').classes('text-3xl font-semibold')
+                with ui.row().classes('items-baseline gap-2'):
+                    ui.label('Qiime2 App').classes('text-3xl font-semibold')
+                    ui.label(VERSION).classes('text-sm text-slate-400')
                 with ui.row().classes('gap-3'):
                     ui.button('Dashboard', icon='table_chart', on_click=self.dashboard.show).props('outline')
                     ui.button('Log out', icon='logout', on_click=on_logout).props('outline')

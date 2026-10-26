@@ -3,12 +3,13 @@ from nicegui import ui
 from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse
 from starlette.middleware.sessions import SessionMiddleware
-from .database import Database
+from . import VERSION
 from .view import PipelinePage
+from .database import Database
 from .auth import BASE_URL, SESSION_TTL, SESSION_COOKIE, oauth, get_user, create_session, delete_session
 
 
-app = FastAPI()
+app = FastAPI(version=VERSION)
 
 app.add_middleware(
     SessionMiddleware,
@@ -71,7 +72,9 @@ async def home(request: Request):
     if user is None:
         with ui.column().classes('w-full max-w-4xl mx-auto p-4 sm:p-8 gap-6'):
             with ui.row().classes('w-full items-center justify-between'):
-                ui.label('Qiime2 App').classes('text-3xl font-semibold')
+                with ui.row().classes('items-baseline gap-2'):
+                    ui.label('Qiime2 App').classes('text-3xl font-semibold')
+                    ui.label(VERSION).classes('text-sm text-slate-400')
             ui.label('Please sign in').classes('text-sm text-slate-500')
             with ui.row().classes('w-full gap-3'):
                 ui.button(
