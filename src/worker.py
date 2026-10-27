@@ -13,6 +13,7 @@ REDIS_PORT = 6379
 REDIS_QUEUE = 'qiime2_web_app'  # start the redis queue worker in another terminal: `rq worker -w rq.worker.SpawnWorker qiime2_web_app`
 
 QIIME2_PIPELINE = 'qiime2_pipeline-2.12.0'
+QIIME2_CONDA_ENV = 'qiime2-amplicon-2024.2'
 FASTQ_DIR = './data/fastq'
 RESOURCE_DIR = './data/resources'
 JOB_DIR = './data/jobs'
@@ -153,7 +154,8 @@ def run_command(job_id: int, cmd: str):
         {'status': 'running', 'job_id': job_id}
     )
 
-    ret = subprocess.run(cmd, shell=True, check=False)
+    full_cmd = f'eval "$(conda shell.bash hook)" && conda activate {QIIME2_CONDA_ENV} && {cmd}'
+    ret = subprocess.run(full_cmd, shell=True, executable='/bin/bash', check=False)
 
     status = 'completed' if ret.returncode == 0 else 'failed'
     db.execute(
