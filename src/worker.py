@@ -10,7 +10,7 @@ from .database import Database
 
 REDIS_HOST = 'localhost'
 REDIS_PORT = 6379
-REDIS_QUEUE = 'qiime2'  # start the redis queue worker in another terminal: `rq worker -w rq.worker.SpawnWorker qiime2`
+REDIS_QUEUE = 'qiime2_web_app'  # start the redis queue worker in another terminal: `rq worker -w rq.worker.SpawnWorker qiime2_web_app`
 
 QIIME2_PIPELINE = 'qiime2_pipeline-2.12.0'
 FASTQ_DIR = './data/fastq'

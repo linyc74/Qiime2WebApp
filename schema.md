@@ -1,6 +1,6 @@
 # PostgreSQL Database Schema
 
-Database name: `qiime2_web_app`  
+Database name: `qiime2_web_app`
 
 ## Tables
 
@@ -45,13 +45,13 @@ Note that the `timestamp` column serves as an alternate human readable ID, which
 ## SQL
 
 ```sql
-CREATE TABLE public.users (
+CREATE TABLE users (
     id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     email character varying(255) NOT NULL UNIQUE,
     created_at timestamp with time zone NOT NULL DEFAULT now()
 );
 
-CREATE TABLE public.jobs (
+CREATE TABLE jobs (
     id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     user_id bigint NOT NULL REFERENCES public.users(id),
     status character varying(20),

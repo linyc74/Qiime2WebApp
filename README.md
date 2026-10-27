@@ -15,9 +15,9 @@ Two services must be running:
 
 From the project directory `Qiime2WebApp`, in two separate terminals, start the Redis Queue worker and the app:
 
-Terminal 1, start a Redix Queue worker named `qiime2`:
+Terminal 1, start a Redix Queue worker named `qiime2_web_app`:
 ```bash
-rq worker -w rq.worker.SpawnWorker qiime2
+rq worker -w rq.worker.SpawnWorker qiime2_web_app
 ```
 
 Terminal 2, start the app:
