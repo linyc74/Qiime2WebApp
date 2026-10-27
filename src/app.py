@@ -6,7 +6,10 @@ from starlette.middleware.sessions import SessionMiddleware
 from . import VERSION
 from .view import PipelinePage
 from .database import Database
-from .auth import BASE_URL, SESSION_TTL, SESSION_COOKIE, oauth, get_user, create_session, delete_session
+from .auth import SESSION_TTL, SESSION_COOKIE, oauth, get_user, create_session, delete_session
+
+
+BASE_URL = 'http://localhost:8080'
 
 
 app = FastAPI(version=VERSION)

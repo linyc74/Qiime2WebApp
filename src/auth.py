@@ -7,7 +7,6 @@ from authlib.integrations.starlette_client import OAuth
 from .worker import REDIS_HOST, REDIS_PORT
 
 
-BASE_URL = 'http://localhost:8080'
 SESSION_TTL = 8 * 60 * 60  # 8 hours
 SESSION_COOKIE = 'app_session'
 
