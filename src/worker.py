@@ -120,7 +120,7 @@ class Worker:
         )
         rq_job_id, status = ret.fetchone()
 
-        if status in['completed', 'failed', 'cancelled']:
+        if status in['completed', 'failed', 'cancelled']:  # do nothing
             print(f'Job {job_id} ({rq_job_id}) is already {status}.')
 
         elif status == 'waiting':  # cancel job if it was waiting, i.e. no started_at yet

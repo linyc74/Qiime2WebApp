@@ -184,7 +184,10 @@ class PipelinePage:
                     choices = list(options)  # create a new list
                     if self.input.values[key] not in choices:
                         choices.append(self.input.values[key])  # append to the new list if not present
-                    control = ui.select(choices, label=key, new_value_mode='add-unique')
+                    control = ui.select(choices, label=key, new_value_mode='add-unique')  # create a select control, similar to ComboBox in PyQt5
+
+                    # this is the most important line
+                    # it couples the control with the data model (UserInput.values)
                     control.bind_value(self.input.values, key).props('outlined').classes('w-full')
                 
                 self.controls[key] = control
@@ -290,11 +293,11 @@ class UserInput:
         self.mode = 'illumina'
         self.db = Database()
         self.set_email()
-        self.user_dirname = f'{self.user_id}_{to_valid_filename(self.email)}'
+        self.user_dirname = f'{self.user_id}_{to_valid_filename(self.email)}'  # user-specific directory name to store data
         self.sample_sheet_name = ''
         self.sample_sheet_content = ''
 
-        self.values = {}
+        self.values = {}  # dynamically updated by UI controls
         for key, options in MODES[self.mode].items():
             if isinstance(options, list):
                 self.values[key] = options[0]
