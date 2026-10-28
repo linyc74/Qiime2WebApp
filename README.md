@@ -18,6 +18,7 @@ Set the Google OAuth environment variables in `~/.bashrc`:
 ```bash
 export GOOGLE_CLIENT_ID="your-google-client-id"
 export GOOGLE_CLIENT_SECRET="your-google-client-secret"
+export BASE_URL="https://example.com"
 ```
 
 From the project directory `Qiime2WebApp`, in two separate terminals, start the Redis Queue worker and the app:
@@ -33,5 +34,3 @@ Terminal 2, start the app:
 ```bash
 python main.py
 ```
-
-Open http://localhost:8080.
