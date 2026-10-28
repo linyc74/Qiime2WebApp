@@ -1,3 +1,4 @@
+import os
 import secrets
 from nicegui import ui
 from fastapi import FastAPI, Request
@@ -9,7 +10,9 @@ from .database import Database
 from .auth import SESSION_TTL, SESSION_COOKIE, oauth, get_user, create_session, delete_session
 
 
-BASE_URL = 'http://localhost:8080'
+HOST = os.getenv('QIIME2_WEB_APP_HOST', '127.0.0.1')  # if the environment variable not set, default to localhost
+PORT = os.getenv('QIIME2_WEB_APP_PORT', 8080)  # if the environment variable not set, default to port 8080
+BASE_URL = f'http://{HOST}:{PORT}'
 
 
 app = FastAPI(version=VERSION)
