@@ -1,3 +1,4 @@
+import os
 import secrets
 from nicegui import ui
 from fastapi import FastAPI, Request
@@ -9,7 +10,7 @@ from .database import Database
 from .auth import SESSION_TTL, SESSION_COOKIE, oauth, get_user, create_session, delete_session
 
 
-BASE_URL = 'http://127.0.0.1:8080'
+BASE_URL = os.environ.get('BASE_URL', 'http://127.0.0.1:8080').rstrip('/')
 
 
 app = FastAPI(version=VERSION)
