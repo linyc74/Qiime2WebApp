@@ -10,7 +10,7 @@ pip install -r requirements.txt
 
 Two services must be running:
 
-- PostgreSQL (`localhost:5432`, user `postgres`, database `qiime2_web_app`)
+- PostgreSQL (`localhost:5432`, user `postgres`, database `qiime2_web_app`). See [`schema.md`](schema.md) for more details.
 - Redis (`localhost:6379`)
 
 Set the Google OAuth environment variables in `~/.bashrc`:
