@@ -15,7 +15,7 @@ REDIS_QUEUE = 'qiime2_web_app'  # start the redis queue worker in another termin
 QIIME2_PIPELINE = 'qiime2_pipeline-2.12.0'
 QIIME2_CONDA_ENV = 'qiime2-amplicon-2024.2'
 FASTQ_DIR = './data/fastq'
-RESOURCE_DIR = './data/resources'
+RESOURCE_DIR = './data/resource'
 JOB_DIR = './data/jobs'
 
 
