@@ -10,6 +10,7 @@ from .database import Database
 from .auth import SESSION_TTL, SESSION_COOKIE, oauth, get_user, create_session, delete_session
 
 
+ASSETS_DIR = './assets'
 BASE_URL = os.environ.get('BASE_URL', 'http://localhost:8080').rstrip('/')
 
 
@@ -95,4 +96,8 @@ async def home(request: Request):
     PipelinePage(user_id=user['user_id'], on_logout=logout)
 
 
-ui.run_with(app, title='Qiime2 App')
+ui.run_with(
+    app,
+    title='Qiime2 App',
+    favicon=f'{ASSETS_DIR}/qiime2.png',
+)
