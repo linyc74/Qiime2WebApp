@@ -55,8 +55,8 @@ class JobInput:
             if isinstance(value, bool):
                 lines.append(f'--{key}')
 
-            elif key in ['output']:
-                lines.append(f'--{key}="{self.outdir}"')                
+            elif key == 'output':
+                lines.append(f'--outdir="{self.outdir}"')                
             
             elif key in ['nb-classifier-qza', 'reference-sequence-qza', 'reference-taxonomy-qza']:
                 lines.append(f'--{key}="{join(RESOURCE_DIR, value)}"')
