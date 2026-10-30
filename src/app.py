@@ -98,6 +98,6 @@ async def home(request: Request):
 
 ui.run_with(
     app,
-    title='Qiime2 App',
+    title='QIIME 2 App',
     favicon=f'{ASSETS_DIR}/qiime2.png',
 )

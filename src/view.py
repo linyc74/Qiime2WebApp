@@ -132,7 +132,7 @@ class PipelinePage:
 
             with ui.row().classes('w-full items-center justify-between'):
                 with ui.row().classes('items-baseline gap-2'):
-                    ui.label('Qiime2 App').classes('text-3xl font-semibold')
+                    ui.label('QIIME 2 App').classes('text-3xl font-semibold')
                     ui.label(VERSION).classes('text-sm text-slate-400')
                 with ui.row().classes('gap-3'):
                     ui.button('Dashboard', icon='table_chart', on_click=self.dashboard.show).props('outline')
