@@ -28,6 +28,7 @@ class JobInput:
 
         self.timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S.%f')[:-3]  # down to milliseconds
         self.outdir = f'{USERS_DIR}/{self.user_dirname}/jobs/{self.timestamp}/{self.parameters['output']}'
+        self.workdir = f'{USERS_DIR}/{self.user_dirname}/temp/{self.timestamp}/'
 
         self.build_cmd()
 
@@ -38,6 +39,8 @@ class JobInput:
             f'python {QIIME2_PIPELINE}',
             f'--fq-dir="{fq_dir}"',
             f'--sample-sheet="{sample_sheet}"',
+            f'--outdir="{self.outdir}"',
+            f'--workdir="{self.workdir}"',
         ]
 
         for key, value in self.parameters.items():
@@ -46,8 +49,8 @@ class JobInput:
                 lines.append(f'--{key}')
 
             elif key == 'output':
-                lines.append(f'--outdir="{self.outdir}"')                
-            
+                continue  # already set above                
+
             elif key in ['nb-classifier-qza', 'reference-sequence-qza', 'reference-taxonomy-qza']:
                 resource = f'{RESOURCE_DIR}/{value}'
                 lines.append(f'--{key}="{resource}"')
@@ -82,10 +85,15 @@ class Worker:
         )
         job_id = ret.scalar_one()
 
-        # create output directory and write sample sheet
         os.makedirs(j.outdir, exist_ok=True)
+
+        # write sample sheet to file
         with open(f'{j.outdir}/{j.sample_sheet_name}', 'w') as f:
             f.write(j.sample_sheet_content)
+
+        # write command to file
+        with open(f'{j.outdir}/command.txt', 'w') as f:
+            f.write(j.cmd)
 
         # enqueue job
         rq_job = self.queue.enqueue(
