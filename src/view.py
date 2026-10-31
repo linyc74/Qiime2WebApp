@@ -9,9 +9,9 @@ from os.path import join
 from typing import Callable
 from urllib.parse import urlencode
 from datetime import datetime, timezone, timedelta
-from . import VERSION
 from .database import Database
-from .worker import Worker, JobInput, USERS_DIR
+from .job import Worker, JobInput
+from .constant import VERSION, USERS_DIR
 
 
 ILLUMINA_KEY_TO_OPTIONS = {
