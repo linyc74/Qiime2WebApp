@@ -1,6 +1,5 @@
 import os
 import rq
-import time
 import subprocess
 from redis import Redis
 from datetime import datetime

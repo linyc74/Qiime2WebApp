@@ -1,30 +1,18 @@
 import os
-import secrets
 import zipfile
-from nicegui import ui
 from typing import Iterator
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse, StreamingResponse
-from starlette.middleware.sessions import SessionMiddleware
 from .database import Database
-from .view import PipelinePage, to_valid_filename
-from .auth import oauth, get_user, create_session, delete_session
-from .constant import VERSION, BASE_URL, ASSETS_DIR, USERS_DIR, SESSION_TTL, SESSION_COOKIE
+from .utils import to_valid_filename
+from .auth import oauth, get_user, create_session
+from .constant import BASE_URL, USERS_DIR, SESSION_TTL, SESSION_COOKIE
 
 
-app = FastAPI(version=VERSION)
-
-app.add_middleware(
-    SessionMiddleware,
-    secret_key=secrets.token_urlsafe(32),
-    session_cookie='oidc_state',
-    max_age=600,
-    same_site='lax',
-    https_only=BASE_URL.startswith('https://'),
-)
+router = APIRouter()
 
 
-@app.get('/login')
+@router.get('/login')
 async def login(request: Request):
     if str(request.base_url).rstrip('/') != BASE_URL:
         return RedirectResponse(f'{BASE_URL}/login')
@@ -33,7 +21,7 @@ async def login(request: Request):
     )
 
 
-@app.get('/auth/callback')
+@router.get('/auth/callback')
 async def callback(request: Request) -> RedirectResponse:
     token = await oauth.google.authorize_access_token(request)  # authorize access token
     userinfo = token['userinfo']
@@ -66,7 +54,7 @@ async def callback(request: Request) -> RedirectResponse:
     return response
 
 
-@app.get('/download-jobs')
+@router.get('/download-jobs')
 async def download_jobs(
         request: Request,
         job_timestamps: list[str] = Query(...)) -> StreamingResponse:
@@ -90,35 +78,6 @@ async def download_jobs(
         media_type='application/zip',
         headers={'Content-Disposition': 'attachment; filename="jobs.zip"'},
     )
-
-
-class _ZipStreamBuffer:
-    """Write-only buffer that forces zipfile.ZipFile into streaming mode."""
-
-    def __init__(self) -> None:
-        self._chunks: list[bytes] = []
-        self._pos: int = 0
-
-    def write(self, data: bytes) -> int:
-        self._chunks.append(data)
-        self._pos += len(data)
-        return len(data)
-
-    def tell(self) -> int:
-        return self._pos
-
-    def seekable(self) -> bool:
-        return False
-
-    def flush(self) -> None:
-        pass
-
-    def pop_bytes(self) -> bytes:
-        if not self._chunks:
-            return b''
-        data = b''.join(self._chunks)
-        self._chunks.clear()
-        return data
 
 
 def iter_zip_jobs(
@@ -163,36 +122,30 @@ def iter_zip_jobs(
         yield data
 
 
-@ui.page('/')
-async def home(request: Request):
-    ui.colors(primary='#12329A', secondary='#25636b')
+class _ZipStreamBuffer:
+    """Write-only buffer that forces zipfile.ZipFile into streaming mode."""
 
-    user: dict | None = await get_user(request)
+    def __init__(self) -> None:
+        self._chunks: list[bytes] = []
+        self._pos: int = 0
 
-    if user is None:
-        with ui.column().classes('w-full max-w-4xl mx-auto p-4 sm:p-8 gap-6'):
-            with ui.row().classes('w-full items-center justify-between'):
-                with ui.row().classes('items-baseline gap-2'):
-                    ui.label('Qiime2 App').classes('text-3xl font-semibold')
-                    ui.label(VERSION).classes('text-sm text-slate-400')
-            ui.label('Please sign in').classes('text-sm text-slate-500')
-            with ui.row().classes('w-full gap-3'):
-                ui.button(
-                    'Sign in with Google',
-                    icon='login',
-                    on_click=lambda: ui.navigate.to(f'{BASE_URL}/login'),
-                )
-        return
+    def write(self, data: bytes) -> int:
+        self._chunks.append(data)
+        self._pos += len(data)
+        return len(data)
 
-    async def logout():
-        await delete_session(request)
-        ui.navigate.to('/')
+    def tell(self) -> int:
+        return self._pos
 
-    PipelinePage(user_id=user['user_id'], on_logout=logout)
+    def seekable(self) -> bool:
+        return False
 
+    def flush(self) -> None:
+        pass
 
-ui.run_with(
-    app,
-    title='QIIME 2 App',
-    favicon=f'{ASSETS_DIR}/qiime2.png',
-)
+    def pop_bytes(self) -> bytes:
+        if not self._chunks:
+            return b''
+        data = b''.join(self._chunks)
+        self._chunks.clear()
+        return data

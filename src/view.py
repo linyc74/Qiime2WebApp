@@ -1,17 +1,24 @@
 import os
-import re
-import csv
-import hashlib
 from nicegui import ui
-from io import StringIO
-from pathlib import Path
 from os.path import join
+from fastapi import Request
 from typing import Callable
 from urllib.parse import urlencode
 from datetime import datetime, timezone, timedelta
 from .database import Database
 from .job import Worker, JobInput
-from .constant import VERSION, USERS_DIR
+from .auth import get_user, delete_session
+from .constant import VERSION, USERS_DIR, BASE_URL
+from .utils import (
+    to_valid_filename,
+    format_timedelta,
+    format_file_size,
+    get_dirs,
+    parse_md5,
+    compute_file_md5,
+    read_parameters,
+    write_parameters,
+)
 
 
 ILLUMINA_KEY_TO_OPTIONS = {
@@ -118,6 +125,34 @@ MODES = {
 }
 
 
+@ui.page('/')
+async def home(request: Request):
+    ui.colors(primary='#12329A')
+
+    user: dict | None = await get_user(request)
+
+    if user is None:
+        with ui.column().classes('w-full max-w-4xl mx-auto p-4 sm:p-8 gap-6'):
+            with ui.row().classes('w-full items-center justify-between'):
+                with ui.row().classes('items-baseline gap-2'):
+                    ui.label('Qiime2 App').classes('text-3xl font-semibold')
+                    ui.label(VERSION).classes('text-sm text-slate-400')
+            ui.label('Please sign in').classes('text-sm text-slate-500')
+            with ui.row().classes('w-full gap-3'):
+                ui.button(
+                    'Sign in with Google',
+                    icon='login',
+                    on_click=lambda: ui.navigate.to(f'{BASE_URL}/login'),
+                )
+        return
+
+    async def logout():
+        await delete_session(request)
+        ui.navigate.to('/')
+
+    PipelinePage(user_id=user['user_id'], on_logout=logout)
+
+
 class PipelinePage:
 
     def __init__(self, user_id: int, on_logout: Callable | None = None):
@@ -127,8 +162,6 @@ class PipelinePage:
         self.controls = {}
         self.dashboard = Dashboard(user_input=self.input, worker=self.worker)
         self.fastq_dialog = FastqDialog(user_input=self.input)
-
-        ui.colors(primary='#12329A', secondary='#25636b')
 
         with ui.column().classes('w-full max-w-4xl mx-auto p-4 sm:p-8 gap-6'):
 
@@ -428,7 +461,7 @@ class Dashboard:
             ui.notify('Please select at least one job.', type='negative')
             return
 
-        query = urlencode([('job_ids', row['id']) for row in self.table.selected])
+        query = urlencode([('job_timestamps', row['id']) for row in self.table.selected])
         url = f'/download-jobs?{query}'  # example: /download-jobs?job_ids=2026-10-29_14-08-17.257&job_ids=2026-10-29_14-12-05.521
         ui.download(url, 'jobs.zip')
     
@@ -606,107 +639,3 @@ class FastqDialog:
                 ui.button('Close', on_click=dialog.close).props('flat')
 
         dialog.open()
-
-
-def to_valid_filename(s: str) -> str:
-    return re.sub(r"[^A-Za-z0-9]", '_', s)
-
-
-def format_timedelta(delta_t: timedelta) -> str:
-    hours, remainder = divmod(int(delta_t.total_seconds()), 3600)
-    minutes, seconds = divmod(remainder, 60)
-    return f'{hours:02d}:{minutes:02d}:{seconds:02d}'
-
-
-def format_file_size(num_bytes: int) -> str:
-    size = float(num_bytes)
-    for unit in ('B', 'KB', 'MB', 'GB', 'TB'):
-        if size < 1024.0 or unit == 'TB':
-            return f'{int(size)} {unit}' if unit == 'B' else f'{size:.1f} {unit}'
-        size /= 1024.0
-    return f'{size:.1f} TB'
-
-
-def get_dirs(source: str, isfullpath: bool) -> list[str]:
-    ret = []
-    for path, dirs, files in os.walk(source):
-        if path == source:
-            ret = [d for d in dirs]
-
-    if isfullpath:
-        ret = [join(source, d) for d in ret]
-
-    if len(ret) > 0:
-        ret.sort()  # make the order consistent across OS platforms
-
-    return ret
-
-
-def parse_md5(name: str, text: str) -> dict[str, str]:
-    """
-    Parse MD5 checksum file content into a filename-to-hash dictionary.
-
-    Supports both standard ``<md5>  <filename>`` (or ``MD5 (file) = <hash>``)
-    and single-hash ``<md5>`` sidecar files (e.g. ``sample.fastq.gz.md5``).
-    """
-    result: dict[str, str] = {}
-    for raw_line in text.lstrip('\ufeff').splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith('#'):
-            continue
-        bsd_match = re.match(r'^MD5\s*\((.+)\)\s*=\s*([0-9a-fA-F]{32})$', line)
-        if bsd_match:
-            filename = os.path.basename(bsd_match.group(1).strip())
-            result[filename] = bsd_match.group(2).lower()
-            continue
-        parts = line.split(None, 1)
-        if len(parts) == 2 and re.fullmatch(r'[0-9a-fA-F]{32}', parts[0]):
-            filename = os.path.basename(parts[1].lstrip('*').strip())
-            result[filename] = parts[0].lower()
-        elif len(parts) == 1 and re.fullmatch(r'[0-9a-fA-F]{32}', parts[0]):
-            if name.lower().endswith('.md5') and len(name) > 4:
-                result[name[:-4]] = parts[0].lower()
-    return result
-
-
-def compute_file_md5(filepath: str, chunk_size: int = 1024 * 1024) -> str:
-    md5 = hashlib.md5()
-    with open(filepath, 'rb') as f:
-        while chunk := f.read(chunk_size):
-            md5.update(chunk)
-    return md5.hexdigest()
-
-
-def read_parameters(name: str, text: str) -> dict:
-    suffix = Path(name).suffix.lower()
-    text = text.lstrip('\ufeff')
-    if suffix in ('.csv', '.tsv', '.tab'):
-        rows = csv.reader(StringIO(text), delimiter=',' if suffix == '.csv' else '\t')
-    elif suffix == '.txt':
-        rows = (line.split(':', 1) for line in text.splitlines())
-    else:
-        raise ValueError('Choose a CSV, TSV, TAB, or TXT parameter file.')
-    result = {}
-    for row in rows:
-        if not row or not row[0].strip():
-            continue
-        if len(row) > 2:
-            raise ValueError('Each parameter row must contain a key and at most one value.')
-        key = row[0].strip()
-        value = row[1].strip() if len(row) == 2 else ''
-        result[key] = value if value else True
-    return result
-
-
-def write_parameters(parameters: dict, suffix: str) -> bytes:
-    output = StringIO(newline='')
-    writer = csv.writer(output, delimiter=',' if suffix == '.csv' else '\t', lineterminator='\n')
-    for key, value in parameters.items():
-        if value is False:
-            continue
-        row = [key] if value is True else [key, str(value)]
-        if suffix == '.txt':
-            output.write(': '.join(row) + '\n')
-        else:
-            writer.writerow(row)
-    return output.getvalue().encode('utf-8')
