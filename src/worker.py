@@ -154,8 +154,15 @@ def run_command(job_id: int, cmd: str):
         {'status': 'running', 'job_id': job_id}
     )
 
-    full_cmd = f'eval "$(conda shell.bash hook)" && conda activate {QIIME2_CONDA_ENV} && {cmd}'
-    ret = subprocess.run(full_cmd, shell=True, executable='/bin/bash', check=False)
+    full_cmds = [
+        f'eval "$(conda shell.bash hook)"',
+        f'conda activate {QIIME2_CONDA_ENV}',
+        'export QT_QPA_PLATFORM=offscreen',
+        'export UNIFRAC_USE_GPU=N',
+        cmd,
+    ]
+
+    ret = subprocess.run(' && '.join(full_cmds), shell=True, executable='/bin/bash', check=False)
 
     status = 'completed' if ret.returncode == 0 else 'failed'
     db.execute(

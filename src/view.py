@@ -426,8 +426,7 @@ class Dashboard:
             return
 
         query = urlencode([('job_ids', row['id']) for row in self.table.selected])
-        url = f'/download-jobs?{query}'
-        print(f'Download URL: {url}', flush=True)
+        url = f'/download-jobs?{query}'  # example: /download-jobs?job_ids=2026-10-29_14-08-17.257&job_ids=2026-10-29_14-12-05.521
         ui.download(url, 'jobs.zip')
     
     def cancel_jobs(self):
