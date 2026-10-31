@@ -1,10 +1,9 @@
 import os
 import re
-import zipfile
-from io import BytesIO
 from nicegui import ui
 from os.path import join
 from typing import Callable
+from urllib.parse import urlencode
 from datetime import datetime, timezone, timedelta
 from . import VERSION
 from .database import Database
@@ -426,18 +425,10 @@ class Dashboard:
             ui.notify('Please select at least one job.', type='negative')
             return
 
-        user_job_dir = join(JOB_DIR, self.user_input.user_dirname)
-        buffer = BytesIO()
-        with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
-            for row in self.table.selected:
-                job_dir = join(user_job_dir, row['id'])
-                for root, _, files in os.walk(job_dir):
-                    for file in files:
-                        filepath = join(root, file)
-                        arcname = os.path.relpath(filepath, user_job_dir)
-                        zf.write(filepath, arcname)
-
-        ui.download(buffer.getvalue(), 'jobs.zip')
+        query = urlencode([('job_ids', row['id']) for row in self.table.selected])
+        url = f'/download-jobs?{query}'
+        print(f'Download URL: {url}', flush=True)
+        ui.download(url, 'jobs.zip')
     
     def cancel_jobs(self):
         if self.table is None or len(self.table.selected) == 0:

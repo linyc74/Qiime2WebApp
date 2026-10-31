@@ -2,8 +2,11 @@ import os
 import re
 import csv
 import hashlib
+import zipfile
 from io import StringIO
+from os.path import join
 from pathlib import Path
+from typing import Iterator
 
 
 def parse_md5(name: str, text: str) -> dict[str, str]:
@@ -74,3 +77,74 @@ def write_parameters(parameters: dict, suffix: str) -> bytes:
         else:
             writer.writerow(row)
     return output.getvalue().encode('utf-8')
+
+
+class _ZipStreamBuffer:
+    """Write-only buffer that forces zipfile.ZipFile into streaming mode."""
+
+    def __init__(self) -> None:
+        self._chunks: list[bytes] = []
+        self._pos: int = 0
+
+    def write(self, data: bytes) -> int:
+        self._chunks.append(data)
+        self._pos += len(data)
+        return len(data)
+
+    def tell(self) -> int:
+        return self._pos
+
+    def seekable(self) -> bool:
+        return False
+
+    def flush(self) -> None:
+        pass
+
+    def pop_bytes(self) -> bytes:
+        if not self._chunks:
+            return b''
+        data = b''.join(self._chunks)
+        self._chunks.clear()
+        return data
+
+
+def iter_zip_jobs(
+        user_job_dir: str,
+        job_ids: list[str],
+        chunk_size: int = 64 * 1024) -> Iterator[bytes]:
+    """Stream a ZIP archive of selected job directories chunk by chunk.
+
+    Args:
+        user_job_dir: Base job directory for the user.
+        job_ids: List of job timestamp IDs to include.
+        chunk_size: Uncompressed read chunk size in bytes.
+
+    Yields:
+        Compressed ZIP archive bytes chunks.
+    """
+    buf = _ZipStreamBuffer()
+    with zipfile.ZipFile(buf, mode='w', compression=zipfile.ZIP_DEFLATED) as zf:
+        for job_id in job_ids:
+            job_dir = join(user_job_dir, os.path.basename(job_id))
+            if not os.path.isdir(job_dir):
+                continue
+            for root, _, files in os.walk(job_dir):
+                for file in files:
+                    filepath = join(root, file)
+                    if not os.path.isfile(filepath):
+                        continue
+                    arcname = os.path.relpath(filepath, user_job_dir)
+                    zinfo = zipfile.ZipInfo.from_file(filepath, arcname)
+                    zinfo.compress_type = zipfile.ZIP_DEFLATED
+
+                    with zf.open(zinfo, mode='w') as dest, open(filepath, 'rb') as src:
+                        while chunk := src.read(chunk_size):
+                            dest.write(chunk)
+                            if data := buf.pop_bytes():
+                                yield data
+
+                    if data := buf.pop_bytes():
+                        yield data
+
+    if data := buf.pop_bytes():
+        yield data

@@ -1,12 +1,15 @@
 import os
 import secrets
+from os.path import join
 from nicegui import ui
-from fastapi import FastAPI, Request
-from fastapi.responses import RedirectResponse
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import RedirectResponse, StreamingResponse
 from starlette.middleware.sessions import SessionMiddleware
 from . import VERSION
-from .view import PipelinePage
+from .worker import JOB_DIR
+from .io import iter_zip_jobs
 from .database import Database
+from .view import PipelinePage, to_valid_filename
 from .auth import SESSION_TTL, SESSION_COOKIE, oauth, get_user, create_session, delete_session
 
 
@@ -65,6 +68,30 @@ async def callback(request: Request) -> RedirectResponse:
         path='/',
     )
     return response
+
+
+@app.get('/download-jobs')
+async def download_jobs(request: Request, job_ids: list[str] = Query(...)) -> StreamingResponse:
+    user: dict | None = await get_user(request)
+    if user is None:
+        raise HTTPException(status_code=401, detail='Unauthorized')
+
+    user_id = user['user_id']
+    db = Database()
+    email = db.execute(
+        '''
+            SELECT email FROM users WHERE id = :user_id
+        ''',
+        {'user_id': user_id}
+    ).scalar_one()
+    user_dirname = f'{user_id}_{to_valid_filename(email)}'
+    user_job_dir = join(JOB_DIR, user_dirname)
+
+    return StreamingResponse(
+        iter_zip_jobs(user_job_dir, job_ids),
+        media_type='application/zip',
+        headers={'Content-Disposition': 'attachment; filename="jobs.zip"'},
+    )
 
 
 @ui.page('/')
