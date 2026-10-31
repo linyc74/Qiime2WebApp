@@ -7,7 +7,7 @@ from urllib.parse import urlencode
 from datetime import datetime, timezone, timedelta
 from . import VERSION
 from .database import Database
-from .worker import Worker, JobInput, JOB_DIR, FASTQ_DIR
+from .worker import Worker, JobInput, USERS_DIR
 from .io import compute_file_md5, parse_md5, read_parameters, write_parameters
 
 
@@ -314,7 +314,7 @@ class UserInput:
 
     def get_output_dirname(self, job_timestamp: str) -> str:
         dirs = get_dirs(
-            source=join(JOB_DIR, self.user_dirname, job_timestamp),
+            source=f'{USERS_DIR}/{self.user_dirname}/jobs/{job_timestamp}',
             isfullpath=False)
 
         if len(dirs) == 0:
@@ -458,7 +458,7 @@ class FastqDialog:
 
     def __init__(self, user_input: UserInput):
         self.user_input = user_input
-        self.user_fastq_dir = join(FASTQ_DIR, self.user_input.user_dirname)
+        self.user_fastq_dir = f'{USERS_DIR}/{self.user_input.user_dirname}/fastq'
         self.table: ui.table | None = None
 
     def show(self):

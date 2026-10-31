@@ -4,7 +4,6 @@ import csv
 import hashlib
 import zipfile
 from io import StringIO
-from os.path import join
 from pathlib import Path
 from typing import Iterator
 
@@ -110,13 +109,13 @@ class _ZipStreamBuffer:
 
 def iter_zip_jobs(
         user_job_dir: str,
-        job_ids: list[str],
+        job_timestamps: list[str],
         chunk_size: int = 64 * 1024) -> Iterator[bytes]:
     """Stream a ZIP archive of selected job directories chunk by chunk.
 
     Args:
         user_job_dir: Base job directory for the user.
-        job_ids: List of job timestamp IDs to include.
+        job_timestamps: List of job timestamps to include.
         chunk_size: Uncompressed read chunk size in bytes.
 
     Yields:
@@ -124,13 +123,13 @@ def iter_zip_jobs(
     """
     buf = _ZipStreamBuffer()
     with zipfile.ZipFile(buf, mode='w', compression=zipfile.ZIP_DEFLATED) as zf:
-        for job_id in job_ids:
-            job_dir = join(user_job_dir, os.path.basename(job_id))
+        for job_timestamp in job_timestamps:
+            job_dir = f'{user_job_dir}/{job_timestamp}'
             if not os.path.isdir(job_dir):
                 continue
             for root, _, files in os.walk(job_dir):
                 for file in files:
-                    filepath = join(root, file)
+                    filepath = f'{root}/{file}'
                     if not os.path.isfile(filepath):
                         continue
                     arcname = os.path.relpath(filepath, user_job_dir)

@@ -1,12 +1,11 @@
 import os
 import secrets
-from os.path import join
 from nicegui import ui
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse, StreamingResponse
 from starlette.middleware.sessions import SessionMiddleware
 from . import VERSION
-from .worker import JOB_DIR
+from .worker import USERS_DIR
 from .io import iter_zip_jobs
 from .database import Database
 from .view import PipelinePage, to_valid_filename
@@ -85,8 +84,7 @@ async def download_jobs(request: Request, job_ids: list[str] = Query(...)) -> St
         ''',
         {'user_id': user_id}
     ).scalar_one()
-    user_dirname = f'{user_id}_{to_valid_filename(email)}'
-    user_job_dir = join(JOB_DIR, user_dirname)
+    user_job_dir = f'{USERS_DIR}/{user_id}_{to_valid_filename(email)}/jobs'
 
     return StreamingResponse(
         iter_zip_jobs(user_job_dir, job_ids),

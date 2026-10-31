@@ -3,7 +3,6 @@ import rq
 import time
 import subprocess
 from redis import Redis
-from os.path import join
 from datetime import datetime
 from .database import Database
 
@@ -11,12 +10,10 @@ from .database import Database
 REDIS_HOST = 'localhost'
 REDIS_PORT = 6379
 REDIS_QUEUE = 'qiime2_web_app'  # start the redis queue worker in another terminal: `rq worker -w rq.worker.SpawnWorker qiime2_web_app`
-
 QIIME2_PIPELINE = 'qiime2_pipeline-2.12.0'
 QIIME2_CONDA_ENV = 'qiime2-amplicon-2024.2'
-FASTQ_DIR = './data/fastq'
+USERS_DIR = './data/users'
 RESOURCE_DIR = './data/resource'
-JOB_DIR = './data/jobs'
 
 
 class JobInput:
@@ -39,15 +36,17 @@ class JobInput:
         self.parameters = parameters
 
         self.timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S.%f')[:-3]  # down to milliseconds
-        self.outdir = join(JOB_DIR, self.user_dirname, self.timestamp, self.parameters['output'])
+        self.outdir = f'{USERS_DIR}/{self.user_dirname}/jobs/{self.timestamp}/{self.parameters['output']}'
 
         self.build_cmd()
 
     def build_cmd(self):
+        fq_dir = f'{USERS_DIR}/{self.user_dirname}/fastq'
+        sample_sheet = f'{self.outdir}/{self.sample_sheet_name}'
         lines = [
             f'python {QIIME2_PIPELINE}',
-            f'--fq-dir="{join(FASTQ_DIR, self.user_dirname)}"',
-            f'--sample-sheet="{join(self.outdir, self.sample_sheet_name)}"',
+            f'--fq-dir="{fq_dir}"',
+            f'--sample-sheet="{sample_sheet}"',
         ]
 
         for key, value in self.parameters.items():
@@ -59,12 +58,14 @@ class JobInput:
                 lines.append(f'--outdir="{self.outdir}"')                
             
             elif key in ['nb-classifier-qza', 'reference-sequence-qza', 'reference-taxonomy-qza']:
-                lines.append(f'--{key}="{join(RESOURCE_DIR, value)}"')
+                resource = f'{RESOURCE_DIR}/{value}'
+                lines.append(f'--{key}="{resource}"')
 
             else:
                 lines.append(f'--{key}="{value}"')
-                
-        lines.append(f'> "{join(self.outdir, "progress.txt")}" 2>&1')
+        
+        progress_txt = f'{self.outdir}/progress.txt'
+        lines.append(f'> "{progress_txt}" 2>&1')
 
         self.cmd = ' \\\n  '.join(lines)
 
@@ -92,7 +93,7 @@ class Worker:
 
         # create output directory and write sample sheet
         os.makedirs(j.outdir, exist_ok=True)
-        with open(join(j.outdir, j.sample_sheet_name), 'w') as f:
+        with open(f'{j.outdir}/{j.sample_sheet_name}', 'w') as f:
             f.write(j.sample_sheet_content)
 
         # enqueue job
