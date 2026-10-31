@@ -61,3 +61,39 @@ CREATE TABLE jobs (
     rq_job_id character varying(255)
 );
 ```
+
+## Configuration
+
+To allow password-less connections to `localhost:5432` for the `postgres` user:
+
+1. Locate the PostgreSQL client authentication configuration file (`pg_hba.conf`):
+
+```bash
+sudo -u postgres psql -t -P format=unaligned -c 'SHOW hba_file;'
+```
+
+Which will show something like: `/etc/postgresql/[VERSION]/main/pg_hba.conf`
+
+2. In `pg_hba.conf`, set the authentication `METHOD` to `trust` for local TCP/IP (`localhost`) connections:
+
+```bash
+sudo vim /etc/postgresql/[VERSION]/main/pg_hba.conf
+```
+
+```text
+# TYPE  DATABASE        USER            ADDRESS                 METHOD
+host    all             postgres        127.0.0.1/32            trust
+host    all             postgres        ::1/128                 trust
+```
+
+3. Reload the PostgreSQL service to apply the changes:
+
+```bash
+sudo systemctl reload postgresql
+```
+
+4. Verify password-less connection:
+
+```bash
+psql -h localhost -p 5432 -U postgres -d qiime2_web_app
+```

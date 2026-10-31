@@ -2,16 +2,11 @@
 
 Web interface to execute `qiime2_pipeline`.
 
-## Run
+## Setup
 
 ```bash
 pip install -r requirements.txt
 ```
-
-Two services must be running:
-
-- PostgreSQL (`localhost:5432`, user `postgres`, database `qiime2_web_app`)
-- Redis (`localhost:6379`)
 
 Set the Google OAuth environment variables in `~/.bashrc`:
 
@@ -20,6 +15,25 @@ export GOOGLE_CLIENT_ID="your-google-client-id"
 export GOOGLE_CLIENT_SECRET="your-google-client-secret"
 export BASE_URL="https://example.com"
 ```
+
+From the project directory `Qiime2WebApp`, make data directories and set up `qiime2_pipeline`
+
+```bash
+mkdir -p ./data/fastq
+mkdir -p ./data/resource
+mkdir -p ./data/jobs
+
+wget https://github.com/linyc74/qiime2_pipeline/archive/refs/tags/2.12.0.tar.gz
+tar xzf 2.12.0.tar.gz
+rm 2.12.0.tar.gz
+```
+
+## Run
+
+Two services must be running:
+
+- PostgreSQL (`localhost:5432`, user `postgres`, database `qiime2_web_app`). See [`schema.md`](schema.md) for more details.
+- Redis (`localhost:6379`)
 
 From the project directory `Qiime2WebApp`, in two separate terminals, start the Redis Queue worker and the app:
 
