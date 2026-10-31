@@ -4,11 +4,8 @@ import secrets
 from fastapi import Request
 from redis.asyncio import Redis
 from authlib.integrations.starlette_client import OAuth
-from .worker import REDIS_HOST, REDIS_PORT
+from .constant import REDIS_HOST, REDIS_PORT, SESSION_TTL, SESSION_COOKIE
 
-
-SESSION_TTL = 8 * 60 * 60  # 8 hours
-SESSION_COOKIE = 'app_session'
 
 redis = Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
 

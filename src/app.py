@@ -1,19 +1,15 @@
 import os
 import secrets
+import zipfile
 from nicegui import ui
+from typing import Iterator
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse, StreamingResponse
 from starlette.middleware.sessions import SessionMiddleware
-from . import VERSION
-from .worker import USERS_DIR
-from .io import iter_zip_jobs
 from .database import Database
 from .view import PipelinePage, to_valid_filename
-from .auth import SESSION_TTL, SESSION_COOKIE, oauth, get_user, create_session, delete_session
-
-
-ASSETS_DIR = './assets'
-BASE_URL = os.environ.get('BASE_URL', 'http://localhost:8080').rstrip('/')
+from .auth import oauth, get_user, create_session, delete_session
+from .constant import VERSION, BASE_URL, ASSETS_DIR, USERS_DIR, SESSION_TTL, SESSION_COOKIE
 
 
 app = FastAPI(version=VERSION)
@@ -71,7 +67,10 @@ async def callback(request: Request) -> RedirectResponse:
 
 
 @app.get('/download-jobs')
-async def download_jobs(request: Request, job_ids: list[str] = Query(...)) -> StreamingResponse:
+async def download_jobs(
+        request: Request,
+        job_timestamps: list[str] = Query(...)) -> StreamingResponse:
+    
     user: dict | None = await get_user(request)
     if user is None:
         raise HTTPException(status_code=401, detail='Unauthorized')
@@ -87,10 +86,81 @@ async def download_jobs(request: Request, job_ids: list[str] = Query(...)) -> St
     user_job_dir = f'{USERS_DIR}/{user_id}_{to_valid_filename(email)}/jobs'
 
     return StreamingResponse(
-        iter_zip_jobs(user_job_dir, job_ids),
+        iter_zip_jobs(user_job_dir, job_timestamps),
         media_type='application/zip',
         headers={'Content-Disposition': 'attachment; filename="jobs.zip"'},
     )
+
+
+class _ZipStreamBuffer:
+    """Write-only buffer that forces zipfile.ZipFile into streaming mode."""
+
+    def __init__(self) -> None:
+        self._chunks: list[bytes] = []
+        self._pos: int = 0
+
+    def write(self, data: bytes) -> int:
+        self._chunks.append(data)
+        self._pos += len(data)
+        return len(data)
+
+    def tell(self) -> int:
+        return self._pos
+
+    def seekable(self) -> bool:
+        return False
+
+    def flush(self) -> None:
+        pass
+
+    def pop_bytes(self) -> bytes:
+        if not self._chunks:
+            return b''
+        data = b''.join(self._chunks)
+        self._chunks.clear()
+        return data
+
+
+def iter_zip_jobs(
+        user_job_dir: str,
+        job_timestamps: list[str],
+        chunk_size: int = 64 * 1024) -> Iterator[bytes]:
+    """Stream a ZIP archive of selected job directories chunk by chunk.
+
+    Args:
+        user_job_dir: Base job directory for the user.
+        job_timestamps: List of job timestamps to include.
+        chunk_size: Uncompressed read chunk size in bytes.
+
+    Yields:
+        Compressed ZIP archive bytes chunks.
+    """
+    buf = _ZipStreamBuffer()
+    with zipfile.ZipFile(buf, mode='w', compression=zipfile.ZIP_DEFLATED) as zf:
+        for job_timestamp in job_timestamps:
+            job_dir = f'{user_job_dir}/{job_timestamp}'
+            if not os.path.isdir(job_dir):
+                continue
+            for root, _, files in os.walk(job_dir):
+                for file in files:
+                    filepath = f'{root}/{file}'
+                    if not os.path.isfile(filepath):
+                        continue
+                    arcname = os.path.relpath(filepath, user_job_dir)
+                    zinfo = zipfile.ZipInfo.from_file(filepath, arcname)
+                    zinfo.compress_type = zipfile.ZIP_DEFLATED
+
+                    with zf.open(zinfo, mode='w') as dest, open(filepath, 'rb') as src:
+                        while chunk := src.read(chunk_size):
+                            dest.write(chunk)
+                            if data := buf.pop_bytes():
+                                yield data
+
+                    if data := buf.pop_bytes():
+                        yield data
+
+    if data := buf.pop_bytes():
+        yield data
 
 
 @ui.page('/')
