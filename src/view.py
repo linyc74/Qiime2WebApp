@@ -197,6 +197,7 @@ class PipelinePage:
 
     def change_mode(self, event):
         self.input.mode = event.value
+        self.input.reset_values()  # illumina and pacbio have different set of parameters, so need to reset the values dict
         self.render_form()
 
     def render_form(self):
@@ -336,13 +337,7 @@ class UserInput:
         self.user_dirname = f'{self.user_id}_{to_valid_filename(self.email)}'  # user-specific directory name to store data
         self.sample_sheet_name = ''
         self.sample_sheet_content = ''
-
-        self.values = {}  # dynamically updated by UI controls
-        for key, options in MODES[self.mode].items():
-            if isinstance(options, list):
-                self.values[key] = options[0]
-            else:
-                self.values[key] = options
+        self.reset_values()
 
     def set_email(self):
         ret = self.db.execute(
@@ -352,6 +347,14 @@ class UserInput:
             {'user_id': self.user_id}
         )
         self.email = ret.scalar_one()
+
+    def reset_values(self):
+        self.values = {}
+        for key, options in MODES[self.mode].items():
+            if isinstance(options, list):
+                self.values[key] = options[0]
+            else:
+                self.values[key] = options
 
     def get_output_dirname(self, job_timestamp: str) -> str:
         dirs = get_dirs(
