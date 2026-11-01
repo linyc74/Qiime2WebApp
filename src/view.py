@@ -85,7 +85,6 @@ class PipelinePage:
 
     def change_mode(self, event):
         self.input.mode = event.value
-        self.input.reset_values()  # illumina and pacbio have different set of parameters, so need to reset the values dict
         self.render_form()
 
     def render_form(self):
@@ -106,19 +105,16 @@ class PipelinePage:
                 ui.button('Load Parameters', icon='upload_file', on_click=self.load_parameter_dialog)
                 ui.button('Save Parameters', icon='download', on_click=self.save_parameter_dialog)
 
-            for key, options in MODES[self.input.mode].items():  # follow items and data types in the presets
-                if isinstance(options, bool):
-                    control = ui.checkbox(key).bind_value(self.input.values, key)  # use self.values to fill in
+            param_dict = self.input.mode_to_param_dict[self.input.mode]  # the data model dictionary to bind
+            for key, value in param_dict.items():
+                if isinstance(value, bool):
+                    control = ui.checkbox(key).bind_value(param_dict, key)  # ui control state bound to the data model dictionary
                 else:
-                    choices = list(options)  # create a new list
-                    if self.input.values[key] not in choices:
-                        choices.append(self.input.values[key])  # append to the new list if not present
-                    control = ui.select(choices, label=key, new_value_mode='add-unique')  # create a select control, similar to ComboBox in PyQt5
-
-                    # this is the most important line
-                    # it couples the control with the data model (UserInput.values)
-                    control.bind_value(self.input.values, key).props('outlined').classes('w-full')
-                
+                    choices = list(value)
+                    if param_dict[key] not in choices:
+                        choices.append(param_dict[key])
+                    control = ui.select(choices, label=key, new_value_mode='add-unique')
+                control.bind_value(param_dict, key).props('outlined').classes('w-full')  # ui control state bound to the data model dictionary
                 self.controls[key] = control
 
     def sample_sheet_dialog(self):
@@ -192,7 +188,8 @@ class PipelinePage:
 
             def download():
                 suffix = file_format.value
-                ui.download(write_parameters(self.input.values, suffix), f'{self.input.mode}-parameters{suffix}')
+                param_dict = self.input.mode_to_param_dict[self.input.mode]
+                ui.download(write_parameters(param_dict, suffix), f'{self.input.mode}-parameters{suffix}')
                 dialog.close()
 
             with ui.row():

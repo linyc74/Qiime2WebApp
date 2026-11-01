@@ -4,7 +4,7 @@ from .constant import USERS_DIR
 from .utils import to_valid_filename, get_dirs, read_parameters
 
 
-ILLUMINA_KEY_TO_OPTIONS = {
+ILLUMINA_PARAM_DICT = {
     'fq1-suffix': ['_R1.fastq.gz'],
     'fq2-suffix': ['_R2.fastq.gz'],
     'output': ['output'],
@@ -55,7 +55,7 @@ ILLUMINA_KEY_TO_OPTIONS = {
     'differential-abundance-p-value': ['0.05'],
     'min-abundance-per-group': ['0.0']
 }
-PACBIO_KEY_TO_OPTIONS = {
+PACBIO_PARAM_DICT = {
     'fq1-suffix': ['.fastq.gz'],
     'output': ['output'],
     'feature-classifier': ['nb', 'vsearch'],
@@ -103,8 +103,8 @@ PACBIO_KEY_TO_OPTIONS = {
     'min-abundance-per-group': ['0.0']
 }
 MODES = {
-    'illumina': ILLUMINA_KEY_TO_OPTIONS,
-    'pacbio': PACBIO_KEY_TO_OPTIONS
+    'illumina': ILLUMINA_PARAM_DICT,
+    'pacbio': PACBIO_PARAM_DICT
 }
 
 
@@ -121,7 +121,9 @@ class UserInput:
         self.user_dirname = f'{self.user_id}_{to_valid_filename(self.email)}'  # user-specific directory name to store data
         self.sample_sheet_name = ''
         self.sample_sheet_content = ''
-        self.reset_values()
+        self.mode_to_param_dict = {}
+        for mode, param_dict in MODES.items():
+            self.mode_to_param_dict[mode] = param_dict.copy()
 
     def set_email(self):
         ret = self.db.execute(
@@ -131,14 +133,6 @@ class UserInput:
             {'user_id': self.user_id}
         )
         self.email = ret.scalar_one()
-
-    def reset_values(self):
-        self.values = {}
-        for key, options in MODES[self.mode].items():
-            if isinstance(options, list):
-                self.values[key] = options[0]
-            else:
-                self.values[key] = options
 
     def get_output_dirname(self, job_timestamp: str) -> str:
         dirs = get_dirs(
@@ -165,7 +159,7 @@ class UserInput:
                 if not isinstance(parameters[key], str):
                     raise ValueError(f'{key} requires a value.')
                 updates[key] = parameters[key]
-        self.values.update(updates)
+        self.mode_to_param_dict[self.mode].update(updates)
 
     def create_job(self) -> JobInput:
         return JobInput(
@@ -174,4 +168,5 @@ class UserInput:
             sample_sheet_name=self.sample_sheet_name,
             sample_sheet_content=self.sample_sheet_content,
             sequencing_platform=self.mode,
-            parameters=self.values)
+            parameters=self.mode_to_param_dict[self.mode]
+        )
