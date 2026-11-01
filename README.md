@@ -13,19 +13,29 @@ Set the Google OAuth environment variables in `~/.bashrc`:
 ```bash
 export GOOGLE_CLIENT_ID="your-google-client-id"
 export GOOGLE_CLIENT_SECRET="your-google-client-secret"
-export BASE_URL="https://example.com"
+export BASE_URL="https://example.com"  # optional, defaults to "http://localhost:8080"
 ```
 
-From the project directory `Qiime2WebApp`, make data directories and set up `qiime2_pipeline`
+From the project directory `Qiime2WebApp`, make data directories and set up `qiime2_pipeline` version `2.12.1`:
 
 ```bash
-mkdir -p ./data/fastq
-mkdir -p ./data/resource
-mkdir -p ./data/jobs
+cd Qiime2WebApp
+mkdir -p ./data/users ./data/resource
+wget https://github.com/linyc74/qiime2_pipeline/archive/refs/tags/2.12.1.tar.gz
+tar xzf 2.12.1.tar.gz
+rm 2.12.1.tar.gz
+```
 
-wget https://github.com/linyc74/qiime2_pipeline/archive/refs/tags/2.12.0.tar.gz
-tar xzf 2.12.0.tar.gz
-rm 2.12.0.tar.gz
+Configure Caddyfile:
+
+```bash
+sudo vim /etc/caddy/Caddyfile
+```
+
+```text
+example.com {
+	reverse_proxy 127.0.0.1:8080
+}
 ```
 
 ## Run

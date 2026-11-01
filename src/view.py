@@ -135,7 +135,7 @@ async def home(request: Request):
         with ui.column().classes('w-full max-w-4xl mx-auto p-4 sm:p-8 gap-6'):
             with ui.row().classes('w-full items-center justify-between'):
                 with ui.row().classes('items-baseline gap-2'):
-                    ui.label('Qiime2 App').classes('text-3xl font-semibold')
+                    ui.label('QIIME 2 App').classes('text-3xl font-semibold')
                     ui.label(VERSION).classes('text-sm text-slate-400')
             ui.label('Please sign in').classes('text-sm text-slate-500')
             with ui.row().classes('w-full gap-3'):
