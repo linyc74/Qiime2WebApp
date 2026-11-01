@@ -1,7 +1,8 @@
 import os
+from .version import get_app_version
 
 
-VERSION = 'v1.0.0-beta'
+VERSION = get_app_version()
 
 ASSETS_DIR = './assets'
 BASE_URL = os.environ.get('BASE_URL', 'http://localhost:8080').rstrip('/')
@@ -19,7 +20,10 @@ REDIS_HOST = 'localhost'
 REDIS_PORT = 6379
 REDIS_QUEUE = 'qiime2_web_app'  # start the redis queue worker in another terminal: `rq worker -w rq.worker.SpawnWorker qiime2_web_app`
 
-QIIME2_PIPELINE = 'qiime2_pipeline-2.12.1'
-QIIME2_CONDA_ENV = 'qiime2-amplicon-2024.2'
+QIIME2_PIPELINE_VERSION = '2.12.1'
+QIIME2_PIPELINE = f'qiime2_pipeline-{QIIME2_PIPELINE_VERSION}'
+QIIME2_VERSION = '2024.2'
+QIIME2_CONDA_ENV = f'qiime2-amplicon-{QIIME2_VERSION}'
+PIPELINE_LABEL = f'{QIIME2_PIPELINE} · {QIIME2_CONDA_ENV}'
 USERS_DIR = './data/users'
 RESOURCE_DIR = './data/resource'

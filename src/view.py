@@ -8,7 +8,7 @@ from datetime import datetime, timezone, timedelta
 from .database import Database
 from .job import Worker, JobInput
 from .auth import get_user, delete_session
-from .constant import VERSION, USERS_DIR, BASE_URL
+from .constant import VERSION, PIPELINE_LABEL, USERS_DIR, BASE_URL
 from .utils import (
     to_valid_filename,
     format_timedelta,
@@ -137,6 +137,7 @@ async def home(request: Request):
                 with ui.row().classes('items-baseline gap-2'):
                     ui.label('QIIME 2 App').classes('text-3xl font-semibold')
                     ui.label(VERSION).classes('text-sm text-slate-400')
+            ui.label(PIPELINE_LABEL).classes('text-sm text-slate-500')
             ui.label('Please sign in').classes('text-sm text-slate-500')
             with ui.row().classes('w-full gap-3'):
                 ui.button(
@@ -173,7 +174,9 @@ class PipelinePage:
                     ui.button('Dashboard', icon='table_chart', on_click=self.dashboard.show).props('outline')
                     ui.button('Log out', icon='logout', on_click=on_logout).props('outline')
             
-            ui.label(self.input.email).classes('text-sm text-slate-500')
+            with ui.row().classes('w-full items-center justify-between'):
+                ui.label(self.input.email).classes('text-sm text-slate-500')
+                ui.label(PIPELINE_LABEL).classes('text-sm text-slate-500')
 
             ui.toggle(
                 {'illumina': 'Illumina Mode', 'pacbio': 'PacBio Mode'},
@@ -184,7 +187,8 @@ class PipelinePage:
             self.form = ui.column().classes('w-full gap-4')
             self.render_form()
 
-            with ui.row().classes('w-full gap-3 justify-end'):
+            with ui.row().classes('w-full gap-3 items-center justify-end'):
+                ui.label(f'Runs {PIPELINE_LABEL}').classes('text-sm text-slate-400')
                 with ui.element('div'):
                     self.submit_button = ui.button('Submit', icon='send', on_click=self.submit)
                     self.submit_button.disable()
