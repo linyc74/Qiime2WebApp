@@ -385,6 +385,7 @@ class UserInput:
             user_dirname=self.user_dirname,
             sample_sheet_name=self.sample_sheet_name,
             sample_sheet_content=self.sample_sheet_content,
+            sequencing_platform=self.mode,
             parameters=self.values)
 
 

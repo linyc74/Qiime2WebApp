@@ -15,6 +15,7 @@ class JobInput:
             user_dirname: str,
             sample_sheet_name: str,
             sample_sheet_content: str,
+            sequencing_platform: str,
             parameters: dict):
         """
         Construct everything needed to submit a job.
@@ -24,6 +25,7 @@ class JobInput:
         self.user_dirname = user_dirname
         self.sample_sheet_name = sample_sheet_name
         self.sample_sheet_content = sample_sheet_content
+        self.sequencing_platform = sequencing_platform
         self.parameters = parameters
 
         self.timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S.%f')[:-3]  # down to milliseconds
@@ -41,6 +43,7 @@ class JobInput:
             f'--sample-sheet="{sample_sheet}"',
             f'--outdir="{self.outdir}"',
             f'--workdir="{self.workdir}"',
+            f'--sequencing-platform="{self.sequencing_platform}"',
         ]
 
         for key, value in self.parameters.items():
