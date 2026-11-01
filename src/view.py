@@ -128,6 +128,7 @@ MODES = {
 @ui.page('/')
 async def home(request: Request):
     ui.colors(primary='#12329A')
+    ui.add_css('body.body--dark { --q-primary: #3B82F6 !important; }')
 
     user: dict | None = await get_user(request)
 

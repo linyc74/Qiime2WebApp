@@ -22,4 +22,5 @@ ui.run_with(
     app,
     title='QIIME 2 App',
     favicon=f'{ASSETS_DIR}/qiime2.png',
+    dark=None,
 )
