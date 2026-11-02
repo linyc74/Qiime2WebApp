@@ -4,7 +4,7 @@ from .constant import USERS_DIR
 from .utils import to_valid_filename, get_dirs, read_parameters
 
 
-ILLUMINA_PARAM_DICT = {
+ILLUMINA_KEY_TO_OPTIONS = {
     'fq1-suffix': ['_R1.fastq.gz'],
     'fq2-suffix': ['_R2.fastq.gz'],
     'output': ['output'],
@@ -55,7 +55,7 @@ ILLUMINA_PARAM_DICT = {
     'differential-abundance-p-value': ['0.05'],
     'min-abundance-per-group': ['0.0']
 }
-PACBIO_PARAM_DICT = {
+PACBIO_KEY_TO_OPTIONS = {
     'fq1-suffix': ['.fastq.gz'],
     'output': ['output'],
     'feature-classifier': ['nb', 'vsearch'],
@@ -103,8 +103,8 @@ PACBIO_PARAM_DICT = {
     'min-abundance-per-group': ['0.0']
 }
 MODES = {
-    'illumina': ILLUMINA_PARAM_DICT,
-    'pacbio': PACBIO_PARAM_DICT
+    'illumina': ILLUMINA_KEY_TO_OPTIONS,
+    'pacbio': PACBIO_KEY_TO_OPTIONS
 }
 
 
@@ -112,6 +112,15 @@ class UserInput:
     """
     Current state (data model) for the user input, dynamically updated by the UI.
     """
+
+    user_id: int
+    mode: str
+    db: Database
+    email: str
+    user_dirname: str
+    sample_sheet_name: str
+    sample_sheet_content: str
+    mode_to_key_to_value: dict[str, dict[str, Any]]
 
     def __init__(self, user_id: int):
         self.user_id = user_id
@@ -121,9 +130,15 @@ class UserInput:
         self.user_dirname = f'{self.user_id}_{to_valid_filename(self.email)}'  # user-specific directory name to store data
         self.sample_sheet_name = ''
         self.sample_sheet_content = ''
-        self.mode_to_param_dict = {}
-        for mode, param_dict in MODES.items():
-            self.mode_to_param_dict[mode] = param_dict.copy()
+        self.mode_to_key_to_value = {}
+        for mode, key_to_options in MODES.items():
+            key_to_value = {}
+            for key, options in key_to_options.items():
+                if isinstance(options, bool):  # this is a flag
+                    key_to_value[key] = False
+                else:  # this is a list of options
+                    key_to_value[key] = options[0]
+            self.mode_to_key_to_value[mode] = key_to_value
 
     def set_email(self):
         ret = self.db.execute(
@@ -159,7 +174,7 @@ class UserInput:
                 if not isinstance(parameters[key], str):
                     raise ValueError(f'{key} requires a value.')
                 updates[key] = parameters[key]
-        self.mode_to_param_dict[self.mode].update(updates)
+        self.mode_to_key_to_value[self.mode].update(updates)
 
     def create_job(self) -> JobInput:
         return JobInput(
@@ -168,5 +183,5 @@ class UserInput:
             sample_sheet_name=self.sample_sheet_name,
             sample_sheet_content=self.sample_sheet_content,
             sequencing_platform=self.mode,
-            parameters=self.mode_to_param_dict[self.mode]
+            parameters=self.mode_to_key_to_value[self.mode]
         )

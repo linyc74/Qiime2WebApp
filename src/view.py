@@ -105,16 +105,18 @@ class PipelinePage:
                 ui.button('Load Parameters', icon='upload_file', on_click=self.load_parameter_dialog)
                 ui.button('Save Parameters', icon='download', on_click=self.save_parameter_dialog)
 
-            param_dict = self.input.mode_to_param_dict[self.input.mode]  # the data model dictionary to bind
-            for key, value in param_dict.items():
-                if isinstance(value, bool):
-                    control = ui.checkbox(key).bind_value(param_dict, key)  # ui control state bound to the data model dictionary
-                else:
-                    choices = list(value)
-                    if param_dict[key] not in choices:
-                        choices.append(param_dict[key])
+            default_key_to_options = MODES[self.input.mode]
+            user_key_to_value = self.input.mode_to_key_to_value[self.input.mode]  # the data model dictionary to bind
+            for key, options in default_key_to_options.items():  # follow the default to render UI
+                if isinstance(options, bool):  # this is a flag
+                    control = ui.checkbox(key).bind_value(user_key_to_value, key)  # ui control state bound to the data model dictionary
+                else:  # list of options
+                    choices = options.copy()
+                    value = user_key_to_value[key]
+                    if value not in choices:
+                        choices.append(value)
                     control = ui.select(choices, label=key, new_value_mode='add-unique')
-                control.bind_value(param_dict, key).props('outlined').classes('w-full')  # ui control state bound to the data model dictionary
+                control.bind_value(user_key_to_value, key).props('outlined').classes('w-full')  # ui control state bound to the data model dictionary
                 self.controls[key] = control
 
     def sample_sheet_dialog(self):
@@ -188,8 +190,8 @@ class PipelinePage:
 
             def download():
                 suffix = file_format.value
-                param_dict = self.input.mode_to_param_dict[self.input.mode]
-                ui.download(write_parameters(param_dict, suffix), f'{self.input.mode}-parameters{suffix}')
+                key_to_value = self.input.mode_to_key_to_value[self.input.mode]
+                ui.download(write_parameters(key_to_value, suffix), f'{self.input.mode}-parameters{suffix}')
                 dialog.close()
 
             with ui.row():
