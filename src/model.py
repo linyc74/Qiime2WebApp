@@ -5,7 +5,7 @@ from .utils import to_valid_filename, get_dirs, read_parameters
 
 
 ILLUMINA_KEY_TO_OPTIONS = {
-    'fq1-suffix': ['_R1.fastq.gz'],
+    'fq1-suffix': ['_R1.fastq.gz'],  # list of options -> user can input the value in the dropdown menu
     'fq2-suffix': ['_R2.fastq.gz'],
     'output': ['output'],
     'feature-classifier': ['nb', 'vsearch'],
@@ -15,7 +15,7 @@ ILLUMINA_KEY_TO_OPTIONS = {
     'vsearch-classifier-max-hits': ['10'],
     'threads': ['1', '4', '8'],
     'paired-end-mode': ['merge', 'pool'],
-    'skip-otu': False,
+    'skip-otu': False,  # boolean flag -> user can check or uncheck the checkbox
     'otu-identity': ['0.97'],
     'dna-concentration-column': ['None'],
     'decontam-threshold': ['0.1'],
@@ -120,7 +120,9 @@ class UserInput:
     user_dirname: str
     sample_sheet_name: str
     sample_sheet_content: str
-    mode_to_key_to_value: dict[str, dict[str, Any]]
+    mode_to_key_to_value: dict[
+        str, dict[str, str | bool]
+    ]
 
     def __init__(self, user_id: int):
         self.user_id = user_id
@@ -130,12 +132,13 @@ class UserInput:
         self.user_dirname = f'{self.user_id}_{to_valid_filename(self.email)}'  # user-specific directory name to store data
         self.sample_sheet_name = ''
         self.sample_sheet_content = ''
+
         self.mode_to_key_to_value = {}
         for mode, key_to_options in MODES.items():
-            key_to_value = {}
+            key_to_value: dict[str, str | bool] = {}
             for key, options in key_to_options.items():
                 if isinstance(options, bool):  # this is a flag
-                    key_to_value[key] = False
+                    key_to_value[key] = options
                 else:  # this is a list of options
                     key_to_value[key] = options[0]
             self.mode_to_key_to_value[mode] = key_to_value

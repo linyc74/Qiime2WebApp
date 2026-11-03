@@ -107,7 +107,10 @@ class PipelinePage:
 
             default_key_to_options = MODES[self.input.mode]
             user_key_to_value = self.input.mode_to_key_to_value[self.input.mode]  # the data model dictionary to bind
-            for key, options in default_key_to_options.items():  # follow the default to render UI
+
+            # use the default options to render UI
+            # if current user value is not in default options, add the value to the dropdown menu
+            for key, options in default_key_to_options.items():
                 if isinstance(options, bool):  # this is a flag
                     control = ui.checkbox(key).bind_value(user_key_to_value, key)  # ui control state bound to the data model dictionary
                 else:  # list of options
@@ -116,7 +119,11 @@ class PipelinePage:
                     if value not in choices:
                         choices.append(value)
                     control = ui.select(choices, label=key, new_value_mode='add-unique')
-                control.bind_value(user_key_to_value, key).props('outlined').classes('w-full')  # ui control state bound to the data model dictionary
+
+                # ui control state bound to the data model dictionary
+                # i.e. the current user value gets selected in the dropdown menu
+                control.bind_value(user_key_to_value, key).props('outlined').classes('w-full')
+
                 self.controls[key] = control
 
     def sample_sheet_dialog(self):
