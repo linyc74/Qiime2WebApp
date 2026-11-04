@@ -24,7 +24,7 @@ OPTIONAL = [
         'keys': ['--baseline'],
         'properties': {
             'action': 'store_true',
-            'help': 'record every current migration file as applied without executing it',
+            'help': 'mark every current migration file as applied without executing it',
         }
     },
     {

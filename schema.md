@@ -9,7 +9,7 @@ Database name: `qiime2_web_app`
 | `users` | Registered users authenticated via Google OAuth |
 | `jobs` | Pipeline execution jobs |
 
-### `users`
+### `users` table
 
 | Column | Type | Nullable | Default | Description |
 | :--- | :--- | :--- | :--- | :--- |
@@ -21,11 +21,9 @@ Database name: `qiime2_web_app`
 - **Unique Constraint**: `users_email_key` (`btree (email)`)
 - **Referenced By**: `jobs.user_id` via foreign key `jobs_user_id_fkey` (`REFERENCES users(id)`)
 
-### `jobs`
+### `jobs` table
 
-Tracks `qiime2_pipeline` job submissions, Redis Queue (`rq`) job IDs, execution timestamps, and statuses (`waiting`, `running`, `completed`, `failed`, `cancelled`).
-
-Note that the `timestamp` column serves as an alternate human readable ID, which is used for UI dashboard and file path. `timestamp` is a string without blank space and special characters.
+Note that the `timestamp` column serves as an alternate human readable ID (e.g. `2026-12-31_23-59-59.000`), which is used for UI dashboard and file path. `timestamp` is a string without blank space and special characters.
 
 | Column | Type | Nullable | Default | Description |
 | :--- | :--- | :--- | :--- | :--- |
@@ -53,7 +51,7 @@ psql -h localhost -p 5432 -U postgres -c 'CREATE DATABASE qiime2_web_app'
 python scripts/migrate.py
 ```
 
-On this database, which already has `users` and `jobs`:
+On an existing up-to-date database, to mark every current migration file as applied without executing SQL:
 
 ```bash
 python scripts/migrate.py --baseline
