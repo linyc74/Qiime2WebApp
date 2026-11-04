@@ -42,25 +42,24 @@ Note that the `timestamp` column serves as an alternate human readable ID, which
 
 ---
 
-## SQL
+## Migrations
 
-```sql
-CREATE TABLE users (
-    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    email character varying(255) NOT NULL UNIQUE,
-    created_at timestamp with time zone NOT NULL DEFAULT now()
-);
+SQL files in [`migration/`](migration/) are the schema. Each file is named `001_description.sql` and is applied once, in filename order, by `scripts/migrate.py`. Applied filenames are stored in `schema_migrations`, which the script creates. Do not edit a file after it has been applied; add the next number instead.
 
-CREATE TABLE jobs (
-    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    user_id bigint NOT NULL REFERENCES public.users(id),
-    status character varying(20),
-    started_at timestamp with time zone,
-    ended_at timestamp with time zone,
-    timestamp character varying(23) NOT NULL,
-    rq_job_id character varying(255)
-);
+On a new database:
+
+```bash
+psql -h localhost -p 5432 -U postgres -c 'CREATE DATABASE qiime2_web_app'
+python scripts/migrate.py
 ```
+
+On this database, which already has `users` and `jobs`:
+
+```bash
+python scripts/migrate.py --baseline
+```
+
+`--dry-run` lists pending files without applying them.
 
 ## Configuration
 
