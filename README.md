@@ -42,7 +42,7 @@ example.com {
 
 Two services must be running:
 
-- PostgreSQL (`localhost:5432`, user `postgres`, database `qiime2_web_app`). See [`schema.md`](schema.md) for the schema and how to apply [`migration/`](migration/).
+- PostgreSQL (`localhost:5432`, user `postgres`, database `qiime2_web_app`). See [`doc/database.md`](doc/database.md) for the schema and how to apply [`migration/`](migration/).
 - Redis (`localhost:6379`)
 
 From the project directory `Qiime2WebApp`, in two separate terminals, start the Redis Queue worker and the app:

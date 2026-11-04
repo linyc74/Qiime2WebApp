@@ -1,4 +1,4 @@
-# PostgreSQL Database Schema
+# PostgreSQL Database
 
 Database name: `qiime2_web_app`
 
@@ -42,7 +42,7 @@ Note that the `timestamp` column serves as an alternate human readable ID (e.g. 
 
 ## Migrations
 
-SQL files in [`migration/`](migration/) are the schema. Each file is named `001_description.sql` and is applied once, in filename order, by `scripts/migrate.py`. Applied filenames are stored in `schema_migrations`, which the script creates. Do not edit a file after it has been applied; add the next number instead.
+SQL files in [`migration/`](../migration/) are the schema. Each file is named `001_description.sql` and is applied once, in filename order, by `scripts/migrate.py`. Applied filenames are stored in `schema_migrations`, which the script creates. Do not edit a file after it has been applied; add the next number instead.
 
 On a new database:
 
